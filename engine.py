@@ -1,4 +1,4 @@
-# engine.py - FINAL UNIFIED ENGINE (EXACT RANKING & CATEGORY)
+# engine.py - FINAL UNIFIED ENGINE (BUTTER RANK 11)
 import os
 import math
 import copy
@@ -199,13 +199,13 @@ class PackingListEngine:
         self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
     # ==========================================
-    # FUNGSI RANKING & KATEGORI BARU (HARDCODED)
+    # FUNGSI RANKING & KATEGORI (BUTTER RANK 11)
     # ==========================================
     def get_category_and_rank(self, kategori_asli, is_receh):
         kat = self.Txt(kategori_asli)
         
-        # Kelompokkan kategori "Lain-lain"
-        if kat in ["HAMPERS", "GRILL BOX", "INNER", "CRAZY BUCKET", "MINYAK", "BUTTER", "PACKAGING"]:
+        # Kelompokkan kategori "Lain-lain" (BUTTER DIHAPUS DARI SINI)
+        if kat in ["HAMPERS", "GRILL BOX", "INNER", "CRAZY BUCKET", "MINYAK", "PACKAGING"]:
             kat = "LAIN-LAIN"
 
         if kat == "DAGING":
@@ -218,12 +218,14 @@ class PackingListEngine:
             return ("Kentang Receh", 8) if is_receh else ("Kentang", 7)
         elif kat == "SAUS":
             return ("Saus Receh", 10) if is_receh else ("Saus", 9)
+        elif kat == "BUTTER":
+            return ("Butter", 11) # Butter Rank 11
         elif kat == "DRY":
-            return ("Dry Receh", 12) if is_receh else ("Dry", 11)
+            return ("Dry Receh", 13) if is_receh else ("Dry", 12)
         elif kat == "LAIN-LAIN":
-            return ("Receh Lain-lain", 14) if is_receh else ("Lain-lain", 13)
+            return ("Receh Lain-lain", 15) if is_receh else ("Lain-lain", 14)
         elif kat in ["BUN", "ROTI"]:
-            return ("Bun", 15)
+            return ("Bun", 16)
         else:
             # Fallback untuk kategori tidak dikenal
             return (f"{kat} Receh" if is_receh else kat, 99)
