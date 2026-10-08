@@ -89,7 +89,7 @@ st.markdown("""
 # Header Utama
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 PT BANGOR</h1>
+    <h1>📦 Packinglist Generator </h1>
     <p>Sistem Generator Packing List Otomatis (Delivery Order)</p>
 </div>
 """, unsafe_allow_html=True)
