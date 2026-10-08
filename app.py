@@ -1,4 +1,4 @@
-# app.py - PACKING LIST GENERATOR (FINAL PRO UI)
+# app.py - PT BANGOR PACKING LIST GENERATOR (FINAL PRO UI + BURGER RAIN)
 import streamlit as st
 import os
 import tempfile
@@ -89,7 +89,7 @@ st.markdown("""
 # Header Utama
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 Packinglist Generator </h1>
+    <h1>📦 Packinglist Generator</h1>
     <p>Sistem Generator Packing List Otomatis (Delivery Order)</p>
 </div>
 """, unsafe_allow_html=True)
@@ -176,39 +176,34 @@ if uploaded is not None:
                     data = f.read()
 
                 # ==========================================
-                # ANIMASI HUJAN BURGER (PENGGANTI BALON)
+                # ANIMASI HUJAN BURGER (BULLETPROOF VERSION)
                 # ==========================================
                 st.markdown("""
-                <div id="burger-rain-container"></div>
-                <style>
-                    #burger-rain-container {
-                        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                        pointer-events: none; z-index: 9999; overflow: hidden;
-                    }
-                    .falling-burger {
-                        position: absolute; top: -50px; font-size: 2.5rem;
-                        animation: burgerFall linear forwards;
-                    }
-                    @keyframes burgerFall {
-                        0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-                        100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
-                    }
-                </style>
                 <script>
-                    (function() {
-                        const container = document.getElementById('burger-rain-container');
-                        const emojis = ['🍔', '🍟', '🥤', '']; 
-                        for(let i = 0; i < 40; i++) {
-                            let b = document.createElement('div');
-                            b.className = 'falling-burger';
-                            b.innerText = emojis[Math.floor(Math.random() * emojis.length)];
-                            b.style.left = Math.random() * 100 + 'vw';
-                            b.style.animationDuration = (Math.random() * 3 + 2) + 's';
-                            b.style.animationDelay = Math.random() * 2 + 's';
-                            container.appendChild(b);
-                        }
-                        setTimeout(() => container.remove(), 7000);
-                    })();
+                (function() {
+                    // Mencegah animasi dobel jika diklik berkali-kali
+                    if (document.getElementById('burger-rain-container')) return;
+                    
+                    const container = document.createElement('div');
+                    container.id = 'burger-rain-container';
+                    container.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 999999; overflow: hidden;';
+                    document.body.appendChild(container);
+
+                    const style = document.createElement('style');
+                    style.innerHTML = `@keyframes burgerFall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0; } }`;
+                    document.head.appendChild(style);
+
+                    const emojis = ['🍔', '🍟', '', '🍗'];
+                    for(let i = 0; i < 50; i++) {
+                        let b = document.createElement('div');
+                        b.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+                        b.style.cssText = `position: absolute; top: -50px; font-size: ${Math.random() * 2 + 1.5}rem; left: ${Math.random() * 100}vw; animation: burgerFall ${Math.random() * 3 + 2}s linear forwards; animation-delay: ${Math.random() * 2}s;`;
+                        container.appendChild(b);
+                    }
+                    
+                    // Hapus container setelah 7 detik
+                    setTimeout(() => { if(container.parentNode) container.parentNode.removeChild(container); }, 7000);
+                })();
                 </script>
                 """, unsafe_allow_html=True)
 
@@ -216,7 +211,7 @@ if uploaded is not None:
                 
                 # Tombol Download
                 st.download_button(
-                    label="️ DOWNLOAD HASIL PACKING LIST (.xlsx)",
+                    label="⬇️ DOWNLOAD HASIL PACKING LIST (.xlsx)",
                     data=data,
                     file_name=download_filename,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -224,7 +219,7 @@ if uploaded is not None:
                 )
                 
             except Exception as e:
-                st.error(f"❌ **GAGAL:** {e}")
+                st.error(f" **GAGAL:** {e}")
             finally:
                 # Hapus file sementara
                 for p in [tmp_in_path, tmp_out_path]:
@@ -236,6 +231,6 @@ if uploaded is not None:
 # ==========================================
 st.markdown("""
 <div class="app-footer">
-    &copy; 2026 PT Bangor - Internal Logistics System. All rights reserved.
+    &copy; 2026 Bangor - Internal Logistics System. All rights reserved.
 </div>
 """, unsafe_allow_html=True)
