@@ -1,4 +1,4 @@
-# engine.py - UNIFIED PACKING LIST ENGINE (FINAL: SHEET = OUTLET)
+# engine.py - FINAL UNIFIED ENGINE (SHEET=OUTLET + VENDOR/RECEH FIX + ANTI-DUPLICATE)
 import os
 import math
 import copy
@@ -58,7 +58,7 @@ class PackingListEngine:
         return unit_upper
 
     def load_master_data(self):
-        self.log("    Membaca Master Data...")
+        self.log("   📚 Membaca Master Data...")
         master_sheet = next((s for s in self.wb.sheetnames if "Master Data" in s or "Master" in s), None)
         if not master_sheet:
             raise Exception(f"Sheet 'Master Data Packinglist' tidak ditemukan. Sheet yang ada: {self.wb.sheetnames}")
@@ -89,7 +89,7 @@ class PackingListEngine:
             self.target_sheet = do_sheet
         else:
             raise Exception(f"Format DO tidak dikenali. Sheet: {sheets}")
-        self.log(f"    Format: {self.format_type} (Sheet: '{self.target_sheet}')")
+        self.log(f"   📄 Format: {self.format_type} (Sheet: '{self.target_sheet}')")
 
     def parse_rincian(self):
         self.log(f"    Parsing sheet: '{self.target_sheet}'...")
@@ -247,7 +247,9 @@ class PackingListEngine:
                 
                 while qty_real > 0.0001:
                     qty_koli = min(qty_real, qty_koli_max)
+                    # PENTING: Tentukan Status VENDOR (Penuh) atau RECEH (Pecahan)
                     status = "VENDOR" if abs(qty_koli - qty_koli_max) < 0.0001 else "RECEH"
+                    
                     if kategori_asli == "FROZEN": kat_out = "FROZEN VENDOR" if status == "VENDOR" else "FROZEN RECEH"
                     elif kategori_asli == "DRY": kat_out = "DRY VENDOR" if status == "VENDOR" else "DRY RECEH"
                     elif kategori_asli == "KEJU": kat_out = "KEJU" if status == "VENDOR" else "KEJU RECEH"
@@ -267,14 +269,22 @@ class PackingListEngine:
         self.log(f"   ✅ Transform: {len(self.TransformResult)} DO")
 
     def group_receh(self):
-        self.log("   📦 Grouping RECEH...")
+        self.log("    Grouping RECEH (Fix: Vendor vs Receh)...")
         MaxReceh = {"FROZEN RECEH": 35, "SAUS": 30, "KENTANG": 15, "PACKAGING": 60}
         for do_no, do_data in self.TransformResult.items():
             final, receh_groups = [], {}
+            
+            # 1. PISAHKAN VENDOR (Kotak Penuh) DAN RECEH (Pecahan)
             for item in do_data["Items"]:
-                if item.get("Status") == "VENDOR": final.append(item)
-                else: receh_groups.setdefault(item["Kategori"], []).append(item)
+                # Jika Status VENDOR (Kotak Penuh), LANGSUNG masuk final. JANGAN DIGABUNG!
+                if item.get("Status") == "VENDOR":
+                    final.append(item)
+                else:
+                    # Jika RECEH, masukkan ke grup untuk dicampur sesuai kategori
+                    kat = item["Kategori"]
+                    receh_groups.setdefault(kat, []).append(item)
                     
+            # 2. PROSES GROUPING RECEH
             for kat, items in receh_groups.items():
                 max_qty = MaxReceh.get(kat, 999)
                 current_group, current_qty = [], 0
@@ -318,13 +328,10 @@ class PackingListEngine:
         border_medium = Border(left=medium, right=medium, top=medium, bottom=medium)
         
         for do_no, data in self.FinalResult.items():
-            # ==========================================
-            # INI BAGIAN PENTINGNYA: NAMA SHEET PAKAI OUTLET
-            # ==========================================
+            # NAMA SHEET BERDASARKAN NAMA OUTLET
             sheet_name = self.SafeSheetName(data["Outlet"])
-            if not sheet_name:
-                sheet_name = "DO"
-                
+            if not sheet_name: sheet_name = "DO"
+            
             # Jika nama outlet sama (1 outlet terima 2 DO beda), tambah _2, _3 dst
             base_name = sheet_name; n = 2
             while sheet_name in out_wb.sheetnames:
