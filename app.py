@@ -179,8 +179,40 @@ if uploaded is not None:
                 with open(tmp_out_path, "rb") as f:
                     data = f.read()
 
-                st.balloons()
-                st.success(f"✅ **BERHASIL!** Total **{len(engine.FinalResult)}** Delivery Order berhasil diproses.")
+                # Icon Burger
+                st.markdown("""
+                <div id="burger-rain-container"></div>
+                <style>
+                    #burger-rain-container {
+                        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                        pointer-events: none; z-index: 9999; overflow: hidden;
+                    }
+                    .falling-burger {
+                        position: absolute; top: -50px; font-size: 2.5rem;
+                        animation: burgerFall linear forwards;
+                    }
+                    @keyframes burgerFall {
+                        0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+                        100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+                    }
+                </style>
+                <script>
+                    (function() {
+                        const container = document.getElementById('burger-rain-container');
+                        const emojis = ['🍔', '🍟', '🥤', '']; // Bisa ditambah emoji lain
+                        for(let i = 0; i < 40; i++) {
+                            let b = document.createElement('div');
+                            b.className = 'falling-burger';
+                            b.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+                            b.style.left = Math.random() * 100 + 'vw';
+                            b.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                            b.style.animationDelay = Math.random() * 2 + 's';
+                            container.appendChild(b);
+                        }
+                        setTimeout(() => container.remove(), 7000);
+                    })();
+                </script>
+                """, unsafe_allow_html=True)
                 
                 # Tombol Download
                 st.download_button(
