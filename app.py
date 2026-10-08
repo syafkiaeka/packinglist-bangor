@@ -1,10 +1,11 @@
-# app.py - PT BANGOR PACKING LIST GENERATOR (MULTI-FILE UPLOAD)
+# app.py - PT BANGOR PACKING LIST GENERATOR (GLOBAL DO TRACKING)
 import streamlit as st
 import os
 import tempfile
+from collections import OrderedDict # PENTING: Import OrderedDict
 from engine import PackingListEngine
 
-st.set_page_config(page_title="PT Bangor - Packing List Generator", page_icon="📦", layout="wide")
+st.set_page_config(page_title="PT Bangor - Packing List Generator", page_icon="", layout="wide")
 
 st.markdown("""
 <style>
@@ -20,14 +21,14 @@ st.markdown("""
 
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 Packinglist Generator </h1>
+    <h1>📦 PackingList Generator</h1>
     <p>Sistem Generator Packing List Otomatis (Multi-File)</p>
 </div>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("ℹ️ Informasi Sistem")
-    st.markdown("**Versi:** 3.0 (Multi-Upload)<br>**Status:** 🟢 Online", unsafe_allow_html=True)
+    st.markdown("**Versi:** 3.2 (Anti-Duplikat DO)<br>**Status:** 🟢 Online", unsafe_allow_html=True)
     st.divider()
     st.subheader("📋 Panduan")
     st.markdown("1. Upload 1 atau **banyak file Excel** sekaligus.<br>2. Klik Generate.<br>3. Download 1 file gabungan.", unsafe_allow_html=True)
@@ -35,7 +36,6 @@ with st.sidebar:
 st.subheader("📤 Upload File Delivery Order")
 st.markdown("Kamu bisa upload **banyak file Excel sekaligus** dari gudang yang berbeda!")
 
-# FITUR MULTI-UPLOAD DI SINI
 uploaded = st.file_uploader(
     "Pilih file Excel (.xlsx / .xlsm)", 
     type=["xlsx", "xlsm"],
@@ -43,10 +43,20 @@ uploaded = st.file_uploader(
     help="Bisa pilih banyak file sekaligus dengan menahan Ctrl/Cmd saat memilih."
 )
 
+# ANTI-DUPLIKAT FILE
 if uploaded:
-    st.success(f"✅ **{len(uploaded)} file** siap diproses.")
+    unique_uploaded = []
+    seen_files = set()
     for f in uploaded:
-        st.text(f" {f.name} ({round(f.size / 1024, 2)} KB)")
+        file_key = (f.name, f.size)
+        if file_key not in seen_files:
+            unique_uploaded.append(f)
+            seen_files.add(file_key)
+    uploaded = unique_uploaded
+
+    st.success(f"✅ **{len(uploaded)} file unik** siap diproses.")
+    for f in uploaded:
+        st.text(f"📄 {f.name} ({round(f.size / 1024, 2)} KB)")
 else:
     st.warning("⏳ Menunggu file diupload...")
 
@@ -58,6 +68,7 @@ if uploaded:
     if generate_clicked:
         master_wb = None
         total_do = 0
+        global_do_groups = OrderedDict() # PENTING: Menyimpan DO yang sudah diproses dari semua file
         
         with st.spinner("⚙️ Sedang memproses semua file... Mohon tunggu."):
             log_box = st.empty()
@@ -67,7 +78,6 @@ if uploaded:
                 log_box.code("\n".join(logs), language="text")
 
             try:
-                # Loop untuk setiap file yang diupload
                 for idx, up_file in enumerate(uploaded):
                     st.write(f"🔄 Memproses file {idx+1}/{len(uploaded)}: **{up_file.name}**...")
                     
@@ -76,17 +86,18 @@ if uploaded:
                         tmp_in_path = tmp_in.name
                     tmp_out_path = tmp_in_path.replace(".xlsx", "_temp.xlsx")
 
-                    # Jalankan engine, masukkan master_wb agar sheet digabung
-                    engine = PackingListEngine(tmp_in_path, tmp_out_path, progress_callback=cb, master_wb=master_wb)
+                    # Kirim global_do_groups ke engine agar tidak memproses DO yang sama 2x
+                    engine = PackingListEngine(tmp_in_path, tmp_out_path, progress_callback=cb, master_wb=master_wb, existing_do_groups=global_do_groups)
                     engine.run()
-                    master_wb = engine.export() # Simpan workbook yang sudah digabung
-                    total_do += len(engine.FinalResult)
                     
-                    # Hapus temp input
+                    # Update global_do_groups dengan data dari file ini
+                    global_do_groups = engine.DOGroups
+                    master_wb = engine.export()
+                    total_do = len(engine.FinalResult) # Total DO unik sejauh ini
+                    
                     if os.path.exists(tmp_in_path): os.remove(tmp_in_path)
                     if os.path.exists(tmp_out_path): os.remove(tmp_out_path)
 
-                # Simpan file final gabungan
                 final_out_path = tempfile.mktemp(suffix=".xlsx")
                 master_wb.save(final_out_path)
 
@@ -117,7 +128,7 @@ if uploaded:
                 </script>
                 """, unsafe_allow_html=True)
 
-                st.success(f"✅ **BERHASIL!** Total **{total_do} Delivery Order** dari {len(uploaded)} file berhasil digabung.")
+                st.success(f"✅ **BERHASIL!** Total **{total_do} Delivery Order Unik** dari {len(uploaded)} file berhasil digabung.")
                 
                 st.download_button(
                     label="⬇️ DOWNLOAD HASIL GABUNGAN (.xlsx)",
