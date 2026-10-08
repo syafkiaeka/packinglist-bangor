@@ -21,7 +21,7 @@ st.markdown("""
 
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 PT BANGOR</h1>
+    <h1>📦 Packinglist Generator - Logistic </h1>
     <p>Sistem Generator Packing List Otomatis (Multi-File)</p>
 </div>
 """, unsafe_allow_html=True)
@@ -112,28 +112,51 @@ if uploaded:
                 with open(final_out_path, "rb") as f:
                     data = f.read()
 
-                # Animasi Burger
-                st.markdown("""
-                <script>
-                (function() {
-                    if (document.getElementById('burger-rain-container')) return;
-                    const container = document.createElement('div');
-                    container.id = 'burger-rain-container';
-                    container.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 999999; overflow: hidden;';
-                    document.body.appendChild(container);
-                    const style = document.createElement('style');
-                    style.innerHTML = `@keyframes burgerFall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0; } }`;
-                    document.head.appendChild(style);
-                    const emojis = ['🍔', '🍟', '', '🍗'];
-                    for(let i = 0; i < 50; i++) {
-                        let b = document.createElement('div');
-                        b.innerText = emojis[Math.floor(Math.random() * emojis.length)];
-                        b.style.cssText = `position: absolute; top: -50px; font-size: ${Math.random() * 2 + 1.5}rem; left: ${Math.random() * 100}vw; animation: burgerFall ${Math.random() * 3 + 2}s linear forwards; animation-delay: ${Math.random() * 2}s;`;
-                        container.appendChild(b);
+                                # ==========================================
+                # ANIMASI HUJAN BURGER (IFRAME METHOD)
+                # ==========================================
+                burger_html = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                    body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
+                    .falling-item {
+                        position: absolute;
+                        top: -50px;
+                        font-size: 2.5rem;
+                        animation: fall linear forwards;
                     }
-                    setTimeout(() => { if(container.parentNode) container.parentNode.removeChild(container); }, 7000);
-                })();
+                    @keyframes fall {
+                        0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+                        100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+                    }
+                </style>
+                </head>
+                <body>
+                <script>
+                    const emojis = ['🍔', '🍟', '🥤', '🍗'];
+                    for(let i = 0; i < 50; i++) {
+                        let el = document.createElement('div');
+                        el.className = 'falling-item';
+                        el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+                        el.style.left = Math.random() * 100 + 'vw';
+                        el.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                        el.style.animationDelay = Math.random() * 2 + 's';
+                        document.body.appendChild(el);
+                    }
+                    // Hapus animasi setelah 6 detik agar tidak berat
+                    setTimeout(() => { document.body.innerHTML = ''; }, 6000);
                 </script>
+                </body>
+                </html>
+                """
+
+                st.markdown(f"""
+                    <iframe srcdoc="{burger_html}" 
+                            style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 99999; border: none;" 
+                            sandbox="allow-scripts">
+                    </iframe>
                 """, unsafe_allow_html=True)
 
                 st.success(f"✅ **BERHASIL!** Total **{total_do} Delivery Order Unik** dari {len(uploaded)} file berhasil digabung.")
@@ -153,6 +176,6 @@ if uploaded:
 
 st.markdown("""
 <div class="app-footer">
-    &copy; 2026 PT Bangor - Internal Logistics System. All rights reserved.
+    &copy; 2026 Bangor - Internal Logistics System. All rights reserved.
 </div>
 """, unsafe_allow_html=True)
