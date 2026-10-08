@@ -1,4 +1,4 @@
-# app.py - PT BANGOR PACKING LIST GENERATOR (SAFE DEDUPLICATION)
+# app.py - PT BANGOR PACKING LIST GENERATOR (FINAL FIXED)
 import streamlit as st
 import os
 import tempfile
@@ -27,10 +27,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 with st.sidebar:
-    st.header("ℹ️ Informasi Sistem")
-    st.markdown("**Versi:** 3.3 (Safe Dedup)<br>**Status:** 🟢 Online", unsafe_allow_html=True)
+    st.header("️ Informasi Sistem")
+    st.markdown("**Versi:** 3.4 (No Double Export)<br>**Status:** 🟢 Online", unsafe_allow_html=True)
     st.divider()
-    st.subheader(" Panduan")
+    st.subheader("📋 Panduan")
     st.markdown("1. Upload 1 atau **banyak file Excel** sekaligus.<br>2. Klik Generate.<br>3. Download 1 file gabungan.", unsafe_allow_html=True)
 
 st.subheader("📤 Upload File Delivery Order")
@@ -43,7 +43,7 @@ uploaded = st.file_uploader(
     help="Bisa pilih banyak file sekaligus dengan menahan Ctrl/Cmd saat memilih."
 )
 
-# ANTI-DUPLIKAT FILE (Berdasarkan Nama & Ukuran)
+# ANTI-DUPLIKAT FILE
 if uploaded:
     unique_uploaded = []
     seen_files = set()
@@ -63,14 +63,14 @@ else:
 st.divider()
 
 if uploaded:
-    generate_clicked = st.button(" GENERATE PACKING LIST (GABUNG SEMUA)", type="primary", use_container_width=True)
+    generate_clicked = st.button("🚀 GENERATE PACKING LIST (GABUNG SEMUA)", type="primary", use_container_width=True)
 
     if generate_clicked:
         master_wb = None
         total_do = 0
-        processed_do_set = set() # Menyimpan Nomor DO yang sudah diproses
+        processed_do_set = set()
         
-        with st.spinner("⚙️ Sedang memproses semua file... Mohon tunggu."):
+        with st.spinner("️ Sedang memproses semua file... Mohon tunggu."):
             log_box = st.empty()
             logs = []
             def cb(msg):
@@ -86,23 +86,20 @@ if uploaded:
                         tmp_in_path = tmp_in.name
                     tmp_out_path = tmp_in_path.replace(".xlsx", "_temp.xlsx")
 
-                    # Jalankan engine (Murni, tanpa campur aduk data file lain)
+                    # 1. Jalankan Engine (Hanya baca & proses data, TIDAK export)
                     engine = PackingListEngine(tmp_in_path, tmp_out_path, progress_callback=cb, master_wb=master_wb)
                     engine.run()
                     
-                    # ==========================================
-                    # FILTER DUPLIKAT DI HASIL AKHIR (AMAN)
-                    # ==========================================
+                    # 2. Filter DO yang sudah pernah diproses (Anti-Duplikat)
                     unique_final_result = OrderedDict()
                     for do_no, data in engine.FinalResult.items():
                         if do_no not in processed_do_set:
                             unique_final_result[do_no] = data
                             processed_do_set.add(do_no)
                     
-                    # Ganti hasil engine hanya dengan DO yang unik/baru
                     engine.FinalResult = unique_final_result
                     
-                    # Export hanya DO yang unik ke master_wb
+                    # 3. Export ke Excel HANYA SEKALI untuk data yang unik
                     master_wb = engine.export()
                     total_do += len(unique_final_result)
                     
@@ -127,7 +124,7 @@ if uploaded:
                     const style = document.createElement('style');
                     style.innerHTML = `@keyframes burgerFall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0; } }`;
                     document.head.appendChild(style);
-                    const emojis = ['🍔', '🍟', '🥤', '🍗'];
+                    const emojis = ['🍔', '🍟', '', '🍗'];
                     for(let i = 0; i < 50; i++) {
                         let b = document.createElement('div');
                         b.innerText = emojis[Math.floor(Math.random() * emojis.length)];
@@ -142,7 +139,7 @@ if uploaded:
                 st.success(f"✅ **BERHASIL!** Total **{total_do} Delivery Order Unik** dari {len(uploaded)} file berhasil digabung.")
                 
                 st.download_button(
-                    label="⬇️ DOWNLOAD HASIL GABUNGAN (.xlsx)",
+                    label="️ DOWNLOAD HASIL GABUNGAN (.xlsx)",
                     data=data,
                     file_name=f"PACKINGLIST_GABUNGAN_{len(uploaded)}FILE.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
