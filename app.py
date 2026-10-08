@@ -20,7 +20,7 @@ st.markdown("""
 
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 PT BANGOR</h1>
+    <h1>📦 Packinglist Generator </h1>
     <p>Sistem Generator Packing List Otomatis (Multi-File)</p>
 </div>
 """, unsafe_allow_html=True)
@@ -105,7 +105,7 @@ if uploaded:
                     const style = document.createElement('style');
                     style.innerHTML = `@keyframes burgerFall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0; } }`;
                     document.head.appendChild(style);
-                    const emojis = ['🍔', '🍟', '🥤', ''];
+                    const emojis = ['🍔', '🍟', '🥤'];
                     for(let i = 0; i < 50; i++) {
                         let b = document.createElement('div');
                         b.innerText = emojis[Math.floor(Math.random() * emojis.length)];
@@ -134,6 +134,6 @@ if uploaded:
 
 st.markdown("""
 <div class="app-footer">
-    &copy; 2026 PT Bangor - Internal Logistics System. All rights reserved.
+    &copy; 2026 Bangor - Internal Logistics System. All rights reserved.
 </div>
 """, unsafe_allow_html=True)
