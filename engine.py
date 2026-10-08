@@ -1,4 +1,4 @@
-# engine.py - PACKING LIST ENGINE (FINAL FIX: THOUSAND ISLAND & DOZ)
+# engine.py - PACKING LIST ENGINE (FINAL FIX: VENDOR VS RECEH)
 import os
 from collections import OrderedDict
 from openpyxl import load_workbook, Workbook
@@ -48,14 +48,13 @@ class PackingListEngine:
         return text
 
     def NormalizeUnit(self, unit):
-        """Konversi unit DO: DOZ/Dozen -> DUS"""
         unit_upper = self.Txt(unit)
         if unit_upper in ["DOZ", "DOZEN"]:
             return "DUS"
         return unit_upper
 
     def load_master_data(self):
-        self.log("📚 Membaca Master Data...")
+        self.log(" Membaca Master Data...")
         ws = self.wb["Master Data Packinglist"]
         for row in range(6, ws.max_row + 1):
             nama = self.Txt(ws[f"B{row}"].value)
@@ -172,7 +171,6 @@ class PackingListEngine:
                 qty = self.Val(ws[f"N{r}"].value)
                 if qty <= 0: continue
                 unit_raw = self.TxtRaw(ws[f"P{r}"].value)
-                # KONVERSI DOZ -> DUS
                 unit_normalized = self.NormalizeUnit(unit_raw)
                 self.DOGroups[nomor_do]["Items"].append({
                     "Nama": nama, "Qty": qty,
@@ -202,7 +200,7 @@ class PackingListEngine:
                 qty_max = master["QtyMax"]
                 unit_master = master["Unit"]
                 kategori_asli = master["Kategori"]
-                unit_do = self.Txt(item["Unit"])  # Sudah dinormalisasi (DOZ -> DUS)
+                unit_do = self.Txt(item["Unit"])
                 qty_do = item["Qty"]
                 if qty_max <= 0 or qty_do <= 0: continue
                 nama_upper = key
@@ -212,7 +210,7 @@ class PackingListEngine:
                     qty_real, qty_koli_max, unit_out = qty_do, qty_max, "DUS"
                 elif unit_master == "PACK":
                     unit_out = "PACK"
-                    if "DUS" in unit_do:  # Termasuk DOZ yang sudah jadi DUS
+                    if "DUS" in unit_do:
                         if "BEEF PATTY SMALL" in nama_upper or "BEEF PATTY LARGE" in nama_upper:
                             isi_dus = 18
                         elif "THOUSAND ISLAND" in nama_upper:
@@ -222,7 +220,6 @@ class PackingListEngine:
                         qty_real = qty_do * isi_dus
                     else:
                         qty_real = qty_do
-                    # ATURAN KHUSUS: THOUSAND ISLAND MAX 20
                     qty_koli_max = 20 if "THOUSAND ISLAND" in nama_upper else qty_max
                 elif unit_master == "BKS":
                     unit_out = "BKS"
@@ -236,7 +233,9 @@ class PackingListEngine:
                 # BREAKDOWN KOLI
                 while qty_real > 0.0001:
                     qty_koli = min(qty_real, qty_koli_max)
+                    # TENTUKAN STATUS: VENDOR (PENUH) ATAU RECEH (KURANG)
                     status = "VENDOR" if abs(qty_koli - qty_koli_max) < 0.0001 else "RECEH"
+                    
                     if kategori_asli == "FROZEN":
                         kat_out = "FROZEN VENDOR" if status == "VENDOR" else "FROZEN RECEH"
                     elif kategori_asli == "DRY":
@@ -250,7 +249,8 @@ class PackingListEngine:
                         "NamaBarang": nama, "Qty": qty_koli,
                         "Unit": unit_out, "Kategori": kat_out,
                         "Rank": self.get_rank(kat_out),
-                        "MaxKoli": qty_koli_max  # SIMPAN BATAS MAKSIMAL PER ITEM
+                        "MaxKoli": qty_koli_max,
+                        "Status": status # PENTING: Tag status untuk grouping
                     })
                     qty_real -= qty_koli
                     
@@ -264,43 +264,34 @@ class PackingListEngine:
         self.log(f"✅ Transform: {len(self.TransformResult)} DO")
 
     def group_receh(self):
-        self.log("📦 Grouping RECEH (dengan aturan khusus Thousand Island)...")
-        # Batas default untuk kategori
+        self.log("📦 Grouping RECEH (Fix: Vendor vs Receh)...")
+        # Batas maksimal grouping untuk kategori RECEH
         MaxReceh = {"FROZEN RECEH": 35, "SAUS": 30, "KENTANG": 15, "PACKAGING": 60}
         
         for do_no, do_data in self.TransformResult.items():
             final, receh_groups = [], {}
             
-            # 1. Pisahkan item yang perlu di-grouping
+            # 1. PISAHKAN VENDOR (KOTAK PENUH) DAN RECEH
             for item in do_data["Items"]:
-                kat = item["Kategori"]
-                # Gunakan batas khusus item jika ada (misal Thousand Island = 20), jika tidak pakai default kategori
-                item_max = item.get("MaxKoli", MaxReceh.get(kat, 999))
-                
-                # Jika item punya batas grouping, masukkan ke grup
-                if kat in MaxReceh or "MaxKoli" in item:
-                    receh_groups.setdefault(kat, []).append(item)
-                else:
+                # Jika Status VENDOR (Kotak Penuh), LANGSUNG masuk final. Jangan digabung!
+                if item.get("Status") == "VENDOR":
                     final.append(item)
+                else:
+                    # Jika RECEH, masukkan ke grup untuk dicampur
+                    kat = item["Kategori"]
+                    receh_groups.setdefault(kat, []).append(item)
                     
-            # 2. Proses grouping dengan menghormati batas khusus per item
+            # 2. PROSES GROUPING RECEH
             for kat, items in receh_groups.items():
+                max_qty = MaxReceh.get(kat, 999) # Target isi grup (misal Saus = 30)
                 current_group, current_qty = [], 0
-                current_max = None
                 
                 for item in items:
-                    # Ambil batas maksimal untuk item ini (Thousand Island = 20, Saus lain = 30)
-                    item_max = item.get("MaxKoli", MaxReceh.get(kat, 999))
                     qty = item["Qty"]
+                    item_max = item.get("MaxKoli", max_qty)
                     
                     while qty > 0:
-                        # Jika batas maksimal berubah (misal dari Saus 30 ke Thousand 20), selesaikan grup saat ini dulu
-                        if current_max is not None and current_max != item_max:
-                            final.extend(current_group)
-                            current_group, current_qty = [], 0
-                            
-                        current_max = item_max
-                        sisa = current_max - current_qty
+                        sisa = max_qty - current_qty
                         qty_masuk = min(qty, sisa)
                         
                         new_item = item.copy()
@@ -310,8 +301,8 @@ class PackingListEngine:
                         current_qty += qty_masuk
                         qty -= qty_masuk
                         
-                        # Jika grup sudah penuh sesuai batasnya, masukkan ke hasil final
-                        if current_qty >= current_max:
+                        # Jika grup sudah penuh sesuai target kategori
+                        if current_qty >= max_qty:
                             final.extend(current_group)
                             current_group, current_qty = [], 0
                             
@@ -332,7 +323,7 @@ class PackingListEngine:
         self.log("📝 Exporting Excel...")
         out_wb = Workbook()
         if not self.FinalResult:
-            self.log("️ Tidak ada data DO yang berhasil diproses.")
+            self.log("⚠️ Tidak ada data DO yang berhasil diproses.")
             ws = out_wb.active
             ws.title = "Info"
             ws["A1"] = "Tidak ada data Packing List yang bisa diproses."
