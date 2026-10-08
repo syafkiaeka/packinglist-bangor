@@ -1,13 +1,14 @@
-# app.py - BANGOR APS PACKING LIST GENERATOR (PRO UI)
+# app.py - PACKING LIST GENERATOR (FINAL PRO UI)
 import streamlit as st
 import os
 import tempfile
 from engine import PackingListEngine
+
 # ==========================================
 # 1. KONFIGURASI HALAMAN & TEMA
 # ==========================================
 st.set_page_config(
-    page_title="Bangor - Packing List Generator",
+    page_title="PT Bangor - Packing List Generator",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -22,6 +23,7 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
+    .stDeployButton {display: none;}
 
     /* Warna Tema Korporat (Navy Blue & Clean White) */
     .stButton>button {
@@ -69,12 +71,6 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
-    /* Styling File Uploader */
-    .stFileUploader > div > button {
-        background-color: #003366;
-        color: white;
-    }
-
     /* Footer */
     .app-footer {
         margin-top: 50px;
@@ -93,7 +89,7 @@ st.markdown("""
 # Header Utama
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 Bangor APP Packinglist Generator </h1>
+    <h1>📦 PT BANGOR</h1>
     <p>Sistem Generator Packing List Otomatis (Delivery Order)</p>
 </div>
 """, unsafe_allow_html=True)
@@ -108,7 +104,7 @@ with st.sidebar:
     **Format Output:** `.xlsx` (Standard)
     """)
     st.divider()
-    st.subheader("📋 Panduan Penggunaan")
+    st.subheader(" Panduan Penggunaan")
     st.markdown("""
     1. Pastikan file Excel memiliki sheet **Master Data Packinglist**.
     2. Sheet DO harus berupa **Rincian Pemindahan Barang** atau **Delivery Order Detail**.
@@ -137,7 +133,7 @@ with col2:
         st.success(f"✅ **{uploaded.name}** siap diproses.")
         st.info(f"Ukuran: {round(uploaded.size / 1024, 2)} KB")
     else:
-        st.warning(" Menunggu file diupload...")
+        st.warning("⏳ Menunggu file diupload...")
 
 st.divider()
 
@@ -153,7 +149,7 @@ if uploaded is not None:
     )
 
     if generate_clicked:
-        with st.spinner("️ Sedang memproses data... Mohon tunggu."):
+        with st.spinner("⚙️ Sedang memproses data... Mohon tunggu."):
             log_box = st.empty()
             logs = []
             
@@ -179,7 +175,9 @@ if uploaded is not None:
                 with open(tmp_out_path, "rb") as f:
                     data = f.read()
 
-                # Icon Burger
+                # ==========================================
+                # ANIMASI HUJAN BURGER (PENGGANTI BALON)
+                # ==========================================
                 st.markdown("""
                 <div id="burger-rain-container"></div>
                 <style>
@@ -199,7 +197,7 @@ if uploaded is not None:
                 <script>
                     (function() {
                         const container = document.getElementById('burger-rain-container');
-                        const emojis = ['🍔', '🍟', '🥤', '']; // Bisa ditambah emoji lain
+                        const emojis = ['🍔', '🍟', '🥤', '']; 
                         for(let i = 0; i < 40; i++) {
                             let b = document.createElement('div');
                             b.className = 'falling-burger';
@@ -213,10 +211,12 @@ if uploaded is not None:
                     })();
                 </script>
                 """, unsafe_allow_html=True)
+
+                st.success(f"✅ **BERHASIL!** Total **{len(engine.FinalResult)}** Delivery Order berhasil diproses.")
                 
                 # Tombol Download
                 st.download_button(
-                    label="⬇️ DOWNLOAD HASIL PACKING LIST (.xlsx)",
+                    label="️ DOWNLOAD HASIL PACKING LIST (.xlsx)",
                     data=data,
                     file_name=download_filename,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -236,6 +236,6 @@ if uploaded is not None:
 # ==========================================
 st.markdown("""
 <div class="app-footer">
-    &copy; 2026 Eka Logistik. All rights reserved.
+    &copy; 2026 PT Bangor - Internal Logistics System. All rights reserved.
 </div>
 """, unsafe_allow_html=True)
