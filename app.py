@@ -1,11 +1,11 @@
-# app.py - PT BANGOR PACKING LIST GENERATOR (GLOBAL DO TRACKING)
+# app.py - PT BANGOR PACKING LIST GENERATOR (SAFE DEDUPLICATION)
 import streamlit as st
 import os
 import tempfile
-from collections import OrderedDict # PENTING: Import OrderedDict
+from collections import OrderedDict
 from engine import PackingListEngine
 
-st.set_page_config(page_title="PT Bangor - Packing List Generator", page_icon="", layout="wide")
+st.set_page_config(page_title="PT Bangor - Packing List Generator", page_icon="📦", layout="wide")
 
 st.markdown("""
 <style>
@@ -21,16 +21,16 @@ st.markdown("""
 
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 PackingList Generator</h1>
+    <h1>📦 PT BANGOR</h1>
     <p>Sistem Generator Packing List Otomatis (Multi-File)</p>
 </div>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("ℹ️ Informasi Sistem")
-    st.markdown("**Versi:** 3.2 (Anti-Duplikat DO)<br>**Status:** 🟢 Online", unsafe_allow_html=True)
+    st.markdown("**Versi:** 3.3 (Safe Dedup)<br>**Status:** 🟢 Online", unsafe_allow_html=True)
     st.divider()
-    st.subheader("📋 Panduan")
+    st.subheader(" Panduan")
     st.markdown("1. Upload 1 atau **banyak file Excel** sekaligus.<br>2. Klik Generate.<br>3. Download 1 file gabungan.", unsafe_allow_html=True)
 
 st.subheader("📤 Upload File Delivery Order")
@@ -43,7 +43,7 @@ uploaded = st.file_uploader(
     help="Bisa pilih banyak file sekaligus dengan menahan Ctrl/Cmd saat memilih."
 )
 
-# ANTI-DUPLIKAT FILE
+# ANTI-DUPLIKAT FILE (Berdasarkan Nama & Ukuran)
 if uploaded:
     unique_uploaded = []
     seen_files = set()
@@ -63,12 +63,12 @@ else:
 st.divider()
 
 if uploaded:
-    generate_clicked = st.button("🚀 GENERATE PACKING LIST (GABUNG SEMUA)", type="primary", use_container_width=True)
+    generate_clicked = st.button(" GENERATE PACKING LIST (GABUNG SEMUA)", type="primary", use_container_width=True)
 
     if generate_clicked:
         master_wb = None
         total_do = 0
-        global_do_groups = OrderedDict() # PENTING: Menyimpan DO yang sudah diproses dari semua file
+        processed_do_set = set() # Menyimpan Nomor DO yang sudah diproses
         
         with st.spinner("⚙️ Sedang memproses semua file... Mohon tunggu."):
             log_box = st.empty()
@@ -86,14 +86,25 @@ if uploaded:
                         tmp_in_path = tmp_in.name
                     tmp_out_path = tmp_in_path.replace(".xlsx", "_temp.xlsx")
 
-                    # Kirim global_do_groups ke engine agar tidak memproses DO yang sama 2x
-                    engine = PackingListEngine(tmp_in_path, tmp_out_path, progress_callback=cb, master_wb=master_wb, existing_do_groups=global_do_groups)
+                    # Jalankan engine (Murni, tanpa campur aduk data file lain)
+                    engine = PackingListEngine(tmp_in_path, tmp_out_path, progress_callback=cb, master_wb=master_wb)
                     engine.run()
                     
-                    # Update global_do_groups dengan data dari file ini
-                    global_do_groups = engine.DOGroups
+                    # ==========================================
+                    # FILTER DUPLIKAT DI HASIL AKHIR (AMAN)
+                    # ==========================================
+                    unique_final_result = OrderedDict()
+                    for do_no, data in engine.FinalResult.items():
+                        if do_no not in processed_do_set:
+                            unique_final_result[do_no] = data
+                            processed_do_set.add(do_no)
+                    
+                    # Ganti hasil engine hanya dengan DO yang unik/baru
+                    engine.FinalResult = unique_final_result
+                    
+                    # Export hanya DO yang unik ke master_wb
                     master_wb = engine.export()
-                    total_do = len(engine.FinalResult) # Total DO unik sejauh ini
+                    total_do += len(unique_final_result)
                     
                     if os.path.exists(tmp_in_path): os.remove(tmp_in_path)
                     if os.path.exists(tmp_out_path): os.remove(tmp_out_path)
@@ -116,7 +127,7 @@ if uploaded:
                     const style = document.createElement('style');
                     style.innerHTML = `@keyframes burgerFall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0; } }`;
                     document.head.appendChild(style);
-                    const emojis = ['🍔', '🍟', '🥤'];
+                    const emojis = ['🍔', '🍟', '🥤', '🍗'];
                     for(let i = 0; i < 50; i++) {
                         let b = document.createElement('div');
                         b.innerText = emojis[Math.floor(Math.random() * emojis.length)];
@@ -145,6 +156,6 @@ if uploaded:
 
 st.markdown("""
 <div class="app-footer">
-    &copy; 2026 Bangor - Internal Logistics System. All rights reserved.
+    &copy; 2026 PT Bangor - Internal Logistics System. All rights reserved.
 </div>
 """, unsafe_allow_html=True)
