@@ -1,4 +1,4 @@
-# engine.py - FINAL UNIFIED ENGINE (SHEET=OUTLET + VENDOR/RECEH FIX + ANTI-DUPLICATE)
+# engine.py - FINAL UNIFIED ENGINE (NO GROUPING, NEW RANKING)
 import os
 import math
 import copy
@@ -89,7 +89,7 @@ class PackingListEngine:
             self.target_sheet = do_sheet
         else:
             raise Exception(f"Format DO tidak dikenali. Sheet: {sheets}")
-        self.log(f"   📄 Format: {self.format_type} (Sheet: '{self.target_sheet}')")
+        self.log(f"    Format: {self.format_type} (Sheet: '{self.target_sheet}')")
 
     def parse_rincian(self):
         self.log(f"    Parsing sheet: '{self.target_sheet}'...")
@@ -198,17 +198,8 @@ class PackingListEngine:
                 })
         self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
-    def get_rank(self, kategori):
-        rank_map = {
-            "DAGING": 1, "FROZEN VENDOR": 2, "FROZEN RECEH": 3,
-            "KEJU RECEH": 4, "KEJU": 5, "KENTANG": 6, "SAUS": 7,
-            "BUTTER": 8, "DRY RECEH": 9, "DRY VENDOR": 10,
-            "MINYAK": 11, "GRILL BOX": 12, "HAMPERS": 13, "BUN": 999
-        }
-        return rank_map.get(kategori, 99)
-
     def transform(self):
-        self.log("   ⚙️ Transforming data + Konversi UOM...")
+        self.log("   ️ Transforming data + Breakdown Koli...")
         for do_no, data in self.DOGroups.items():
             hasil = []
             for item in data["Items"]:
@@ -217,6 +208,7 @@ class PackingListEngine:
                 master = self.MasterData.get(key)
                 if not master: continue
                 if "DUS" in key: continue
+                
                 qty_max = master["QtyMax"]
                 unit_master = master["Unit"]
                 kategori_asli = master["Kategori"]
@@ -225,6 +217,7 @@ class PackingListEngine:
                 if qty_max <= 0 or qty_do <= 0: continue
                 nama_upper = key
                 
+                # KONVERSI UOM
                 if unit_master == "DUS":
                     qty_real, qty_koli_max, unit_out = qty_do, qty_max, "DUS"
                 elif unit_master == "PACK":
@@ -245,19 +238,42 @@ class PackingListEngine:
                     
                 if qty_koli_max <= 0: qty_koli_max = qty_max
                 
+                # BREAKDOWN KOLI & PENENTUAN KATEGORI/RECEH
                 while qty_real > 0.0001:
                     qty_koli = min(qty_real, qty_koli_max)
-                    # PENTING: Tentukan Status VENDOR (Penuh) atau RECEH (Pecahan)
-                    status = "VENDOR" if abs(qty_koli - qty_koli_max) < 0.0001 else "RECEH"
+                    # Jika qty_koli kurang dari kapasitas maksimal, berarti RECEH
+                    is_receh = qty_koli < (qty_koli_max - 0.0001)
                     
-                    if kategori_asli == "FROZEN": kat_out = "FROZEN VENDOR" if status == "VENDOR" else "FROZEN RECEH"
-                    elif kategori_asli == "DRY": kat_out = "DRY VENDOR" if status == "VENDOR" else "DRY RECEH"
-                    elif kategori_asli == "KEJU": kat_out = "KEJU" if status == "VENDOR" else "KEJU RECEH"
-                    else: kat_out = kategori_asli
-                        
+                    # MAPPING KATEGORI & RANKING SESUAI PERMINTAAN
+                    kat_asli_upper = self.Txt(kategori_asli)
+                    if kat_asli_upper == "DAGING":
+                        out_kat = "DAGING RECEH" if is_receh else "DAGING"
+                        rank = 2 if is_receh else 1
+                    elif kat_asli_upper == "FROZEN":
+                        out_kat = "FROZEN RECEH" if is_receh else "FROZEN"
+                        rank = 4 if is_receh else 3
+                    elif kat_asli_upper == "KENTANG":
+                        out_kat = "KENTANG RECEH" if is_receh else "KENTANG"
+                        rank = 6 if is_receh else 5
+                    elif kat_asli_upper == "SAUS":
+                        out_kat = "SAUS RECEH" if is_receh else "SAUS"
+                        rank = 8 if is_receh else 7
+                    elif kat_asli_upper in ["DRY", "PACKAGING"]:
+                        out_kat = "PACKAGING RECEH" if is_receh else "PACKAGING"
+                        rank = 10 if is_receh else 9
+                    elif kat_asli_upper in ["BUN", "ROTI"]:
+                        out_kat = "ROTI"
+                        rank = 11
+                    elif kat_asli_upper == "KEJU": # Fallback untuk Keju
+                        out_kat = "KEJU RECEH" if is_receh else "KEJU"
+                        rank = 13 if is_receh else 12
+                    else:
+                        out_kat = kategori_asli
+                        rank = 99
+
                     hasil.append({
-                        "NamaBarang": nama, "Qty": qty_koli, "Unit": unit_out, "Kategori": kat_out,
-                        "Rank": self.get_rank(kat_out), "MaxKoli": qty_koli_max, "Status": status
+                        "NamaBarang": nama, "Qty": qty_koli, "Unit": unit_out, 
+                        "Kategori": out_kat, "Rank": rank
                     })
                     qty_real -= qty_koli
                     
@@ -269,41 +285,14 @@ class PackingListEngine:
         self.log(f"   ✅ Transform: {len(self.TransformResult)} DO")
 
     def group_receh(self):
-        self.log("    Grouping RECEH (Fix: Vendor vs Receh)...")
-        MaxReceh = {"FROZEN RECEH": 35, "SAUS": 30, "KENTANG": 15, "PACKAGING": 60}
+        self.log("   📦 Finalizing (Tanpa Grouping MaxReceh)...")
+        # LANGSUNG COPY DARI TRANSFORM KE FINAL RESULT (TIDAK ADA GROUPING)
         for do_no, do_data in self.TransformResult.items():
-            final, receh_groups = [], {}
-            
-            # 1. PISAHKAN VENDOR (Kotak Penuh) DAN RECEH (Pecahan)
-            for item in do_data["Items"]:
-                # Jika Status VENDOR (Kotak Penuh), LANGSUNG masuk final. JANGAN DIGABUNG!
-                if item.get("Status") == "VENDOR":
-                    final.append(item)
-                else:
-                    # Jika RECEH, masukkan ke grup untuk dicampur sesuai kategori
-                    kat = item["Kategori"]
-                    receh_groups.setdefault(kat, []).append(item)
-                    
-            # 2. PROSES GROUPING RECEH
-            for kat, items in receh_groups.items():
-                max_qty = MaxReceh.get(kat, 999)
-                current_group, current_qty = [], 0
-                for item in items:
-                    qty = item["Qty"]
-                    while qty > 0:
-                        sisa = max_qty - current_qty
-                        qty_masuk = min(qty, sisa)
-                        new_item = item.copy(); new_item["Qty"] = qty_masuk
-                        current_group.append(new_item)
-                        current_qty += qty_masuk; qty -= qty_masuk
-                        if current_qty >= max_qty:
-                            final.extend(current_group); current_group, current_qty = [], 0
-                if current_group: final.extend(current_group)
-                    
-            final.sort(key=lambda x: (x["Rank"], x["NamaBarang"].upper()))
             self.FinalResult[do_no] = {
-                "Outlet": do_data["Outlet"], "Tanggal": do_data.get("Tanggal", ""), 
-                "ShipVia": do_data.get("ShipVia", ""), "Items": final
+                "Outlet": do_data["Outlet"], 
+                "Tanggal": do_data.get("Tanggal", ""), 
+                "ShipVia": do_data.get("ShipVia", ""), 
+                "Items": do_data["Items"]
             }
         self.log(f"   ✅ Final Result: {len(self.FinalResult)} DO")
 
@@ -332,7 +321,6 @@ class PackingListEngine:
             sheet_name = self.SafeSheetName(data["Outlet"])
             if not sheet_name: sheet_name = "DO"
             
-            # Jika nama outlet sama (1 outlet terima 2 DO beda), tambah _2, _3 dst
             base_name = sheet_name; n = 2
             while sheet_name in out_wb.sheetnames:
                 sheet_name = f"{base_name[:28]}_{n}"; n += 1
