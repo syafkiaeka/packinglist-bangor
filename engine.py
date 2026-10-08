@@ -1,6 +1,8 @@
-# engine.py - PACKING LIST ENGINE (FINAL FIX: VENDOR VS RECEH)
+# engine.py - UNIFIED PACKING LIST ENGINE (GABUNGAN VERSI IT & V2.0)
 import os
-from collections import OrderedDict
+import math
+import copy
+from collections import OrderedDict, defaultdict
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 
@@ -16,6 +18,7 @@ class PackingListEngine:
         self.TransformResult = OrderedDict()
         self.FinalResult = {}
         self.format_type = None
+        self.target_sheet = ""
         self.logs = []
 
     def log(self, msg):
@@ -53,9 +56,18 @@ class PackingListEngine:
             return "DUS"
         return unit_upper
 
+    # ==========================================
+    # 1. LOAD MASTER DATA
+    # ==========================================
     def load_master_data(self):
         self.log(" Membaca Master Data...")
-        ws = self.wb["Master Data Packinglist"]
+        master_sheet = next((s for s in self.wb.sheetnames if "Master Data" in s or "Master" in s), None)
+        if not master_sheet:
+            raise Exception(f"Sheet 'Master Data Packinglist' tidak ditemukan. Sheet yang ada: {self.wb.sheetnames}")
+        
+        ws = self.wb[master_sheet]
+        self.log(f"   -> Menggunakan sheet: '{master_sheet}'")
+        
         for row in range(6, ws.max_row + 1):
             nama = self.Txt(ws[f"B{row}"].value)
             if not nama or nama in self.MasterData: continue
@@ -65,23 +77,39 @@ class PackingListEngine:
                 "Unit": self.Txt(ws[f"E{row}"].value),
                 "Kategori": self.Txt(ws[f"F{row}"].value)
             }
-        self.log(f"✅ Master Data: {len(self.MasterData)} item")
+        self.log(f"✅ Master Data: {len(self.MasterData)} item terbaca.")
 
+    # ==========================================
+    # 2. DETEKSI FORMAT OTOMATIS
+    # ==========================================
     def detect_format(self):
+        self.log("🔍 Mendeteksi format Delivery Order...")
         sheets = self.wb.sheetnames
-        if "Rincian Pemindahan Barang" in sheets:
-            self.format_type = "Rincian"
-        elif "Delivery Order Detail" in sheets:
-            self.format_type = "DeliveryOrder"
-        else:
-            raise Exception(f"Format tidak dikenali. Sheet: {sheets}")
-        self.log(f"📄 Format: {self.format_type}")
+        
+        # Cek Format 1: Rincian Pemindahan Barang (File 1)
+        rincian_sheet = next((s for s in sheets if "Rincian" in s or "Pemindahan" in s), None)
+        # Cek Format 2: Delivery Order Detail (File 2)
+        do_sheet = next((s for s in sheets if "Delivery Order" in s or "DO Detail" in s), None)
 
+        if rincian_sheet:
+            self.format_type = "Rincian"
+            self.target_sheet = rincian_sheet
+            self.log(f"   -> Format terdeteksi: Rincian Pemindahan (Sheet: '{rincian_sheet}')")
+        elif do_sheet:
+            self.format_type = "DeliveryOrder"
+            self.target_sheet = do_sheet
+            self.log(f"   -> Format terdeteksi: Delivery Order Detail (Sheet: '{do_sheet}')")
+        else:
+            raise Exception(f"Format DO tidak dikenali. Sheet yang tersedia: {sheets}")
+
+    # ==========================================
+    # 3. PARSER: RINCIAN PEMINDAHAN (FILE 1)
+    # ==========================================
     def parse_rincian(self):
-        self.log("🔍 Parsing Rincian Pemindahan Barang...")
-        ws = self.wb["Rincian Pemindahan Barang"]
+        self.log(f"📄 Parsing sheet: '{self.target_sheet}' (Auto-detect header)...")
+        ws = self.wb[self.target_sheet]
         header_keywords = {
-            "DO": ["NOPEMINDAHAN", "NOTRANSAKSI", "NOMORTRANSAKSI", "NO", "DO"],
+            "DO": ["NOPEMINDAHAN", "NOPEMINDAHAN#", "NOMORPEMINDAHAN", "NOTRANSAKSI", "NOMORTRANSAKSI", "NO", "DO"],
             "TANGGAL": ["TANGGAL", "DATE", "TGL"],
             "GUDANG": ["GUDANGTUJUAN/DARI", "GUDANGTUJUAN", "GUDANGDARI", "GUDANG", "OUTLET"],
             "NAMA": ["NAMABARANG", "NAMAITEM", "ITEM", "BARANG"],
@@ -101,83 +129,118 @@ class PackingListEngine:
                             kandidat[field] = c; break
             if "NAMA" in kandidat and "QTY" in kandidat:
                 header_row, header_map = r, kandidat; break
+                
         if not header_row:
-            raise Exception("Header 'Rincian Pemindahan Barang' tidak ditemukan")
-
+            raise Exception(f"Header 'Rincian Pemindahan Barang' tidak ditemukan di 30 baris pertama.")
+        
+        self.log(f"   -> Header ditemukan di baris ke-{header_row}. Memproses data...")
         last_do, last_tgl, last_gudang, last_ship = None, None, None, None
+        
         for r in range(header_row + 1, ws.max_row + 1):
             def cell(field):
                 return ws.cell(row=r, column=header_map.get(field, 0)).value if field in header_map else None
+                
             no_do = cell("DO")
             if no_do is not None:
                 no_do = self.TxtRaw(no_do)
                 if no_do: last_do = no_do
             else: no_do = last_do
+            
             tgl = cell("TANGGAL")
             if tgl is not None: last_tgl = tgl
             else: tgl = last_tgl
+            
             gudang = cell("GUDANG")
             if gudang is not None:
                 g = self.TxtRaw(gudang)
                 if g: last_gudang = g
             gudang = last_gudang
+            
             ship = cell("SHIPVIA")
             if ship is not None:
                 s = self.TxtRaw(ship)
                 if s: last_ship = s
             ship = last_ship
+            
             nama = cell("NAMA")
             if nama is None: continue
             nama = self.TxtRaw(nama)
             if not nama: continue
+            
             qty = cell("QTY")
             try:
                 if qty is None: continue
                 qty = float(qty)
             except: continue
             if qty <= 0: continue
+            
             unit = self.TxtRaw(cell("UNIT")) if "UNIT" in header_map else ""
             if not no_do: continue
+            
             if no_do not in self.DOGroups:
                 self.DOGroups[no_do] = {"Tanggal": tgl, "Outlet": gudang, "ShipVia": ship, "Items": []}
             self.DOGroups[no_do]["Items"].append({"Nama": nama, "Qty": qty, "Unit": unit})
         self.log(f"✅ DO terbaca: {len(self.DOGroups)}")
 
+    # ==========================================
+    # 4. PARSER: DELIVERY ORDER DETAIL (FILE 2)
+    # ==========================================
     def parse_delivery_order(self):
-        self.log("🔍 Parsing Delivery Order Detail...")
-        ws = self.wb["Delivery Order Detail"]
-        header_rows = [r for r in range(1, ws.max_row + 1)
-                       if self.Txt(ws[f"C{r}"].value) == "NUMBER"]
+        self.log(f"📄 Parsing sheet: '{self.target_sheet}' (Kolom Spesifik)...")
+        ws = self.wb[self.target_sheet]
+        
+        header_rows = []
+        for r in range(1, ws.max_row + 1):
+            if self.Txt(ws.cell(row=r, column=3).value) == "NUMBER": # Kolom C
+                header_rows.append(r)
         header_rows.append(ws.max_row + 1)
+        
+        if not header_rows or header_rows[0] > ws.max_row:
+            raise Exception(f"Tidak ditemukan header 'NUMBER' di Kolom C.")
+            
+        self.log(f"   -> Ditemukan {len(header_rows)-1} blok header DO.")
+        
         for i in range(len(header_rows) - 1):
             start, end = header_rows[i], header_rows[i + 1]
-            nomor_do = self.TxtRaw(ws[f"F{start}"].value)
-            outlet = self.TxtRaw(ws[f"M{start}"].value)
+            nomor_do = self.TxtRaw(ws.cell(row=start, column=6).value) # Kolom F
+            outlet = self.TxtRaw(ws.cell(row=start, column=13).value) # Kolom M
+            
+            # Ambil Tanggal (baris setelah nomor DO di kolom F)
             tanggal = ""
             if start + 1 < end:
                 tanggal_val = ws.cell(row=start+1, column=6).value
                 if tanggal_val: tanggal = tanggal_val
+                
+            # Ambil Ship Via (Kolom O/P)
             ship_via = ""
             for col in range(14, 17):
                 val = ws.cell(row=start, column=col).value
                 if val:
                     ship_via = self.TxtRaw(val)
                     break
+                    
             if not nomor_do: continue
             self.DOGroups[nomor_do] = {"Outlet": outlet, "Tanggal": tanggal, "ShipVia": ship_via, "Items": []}
+            
             for r in range(start, end):
-                nama = self.TxtRaw(ws[f"H{r}"].value)
+                nama = self.TxtRaw(ws.cell(row=r, column=8).value) # Kolom H
                 if "DUS" in self.Txt(nama) or not nama: continue
-                qty = self.Val(ws[f"N{r}"].value)
+                if nama.upper() == "ITEM NAME": continue
+                
+                qty = self.Val(ws.cell(row=r, column=14).value) # Kolom N
                 if qty <= 0: continue
-                unit_raw = self.TxtRaw(ws[f"P{r}"].value)
+                
+                unit_raw = self.TxtRaw(ws.cell(row=r, column=16).value) # Kolom P
                 unit_normalized = self.NormalizeUnit(unit_raw)
+                
                 self.DOGroups[nomor_do]["Items"].append({
-                    "Nama": nama, "Qty": qty,
-                    "Unit": unit_normalized
+                    "Nama": nama, "Qty": qty, "Unit": unit_normalized
                 })
         self.log(f"✅ DO terbaca: {len(self.DOGroups)}")
 
+    # ==========================================
+    # 5. TRANSFORM + UOM CONVERSION (FILE 2 LOGIC)
+    # ==========================================
     def get_rank(self, kategori):
         rank_map = {
             "DAGING": 1, "FROZEN VENDOR": 2, "FROZEN RECEH": 3,
@@ -188,7 +251,7 @@ class PackingListEngine:
         return rank_map.get(kategori, 99)
 
     def transform(self):
-        self.log("⚙️ Transforming data + breakdown koli...")
+        self.log("️ Transforming data + Konversi UOM + Breakdown...")
         for do_no, data in self.DOGroups.items():
             hasil = []
             for item in data["Items"]:
@@ -197,6 +260,7 @@ class PackingListEngine:
                 master = self.MasterData.get(key)
                 if not master: continue
                 if "DUS" in key: continue
+                
                 qty_max = master["QtyMax"]
                 unit_master = master["Unit"]
                 kategori_asli = master["Kategori"]
@@ -205,7 +269,7 @@ class PackingListEngine:
                 if qty_max <= 0 or qty_do <= 0: continue
                 nama_upper = key
                 
-                # KONVERSI UOM
+                # KONVERSI UOM (Logika File 2)
                 if unit_master == "DUS":
                     qty_real, qty_koli_max, unit_out = qty_do, qty_max, "DUS"
                 elif unit_master == "PACK":
@@ -230,10 +294,9 @@ class PackingListEngine:
                     
                 if qty_koli_max <= 0: qty_koli_max = qty_max
                 
-                # BREAKDOWN KOLI
+                # BREAKDOWN KOLI + TAG STATUS
                 while qty_real > 0.0001:
                     qty_koli = min(qty_real, qty_koli_max)
-                    # TENTUKAN STATUS: VENDOR (PENUH) ATAU RECEH (KURANG)
                     status = "VENDOR" if abs(qty_koli - qty_koli_max) < 0.0001 else "RECEH"
                     
                     if kategori_asli == "FROZEN":
@@ -250,7 +313,7 @@ class PackingListEngine:
                         "Unit": unit_out, "Kategori": kat_out,
                         "Rank": self.get_rank(kat_out),
                         "MaxKoli": qty_koli_max,
-                        "Status": status # PENTING: Tag status untuk grouping
+                        "Status": status
                     })
                     qty_real -= qty_koli
                     
@@ -263,50 +326,42 @@ class PackingListEngine:
             }
         self.log(f"✅ Transform: {len(self.TransformResult)} DO")
 
+    # ==========================================
+    # 6. GROUPING RECEH (FILE 1 LOGIC + VENDOR FIX)
+    # ==========================================
     def group_receh(self):
-        self.log("📦 Grouping RECEH (Fix: Vendor vs Receh)...")
-        # Batas maksimal grouping untuk kategori RECEH
+        self.log("📦 Grouping RECEH (MaxReceh Logic)...")
         MaxReceh = {"FROZEN RECEH": 35, "SAUS": 30, "KENTANG": 15, "PACKAGING": 60}
         
         for do_no, do_data in self.TransformResult.items():
             final, receh_groups = [], {}
             
-            # 1. PISAHKAN VENDOR (KOTAK PENUH) DAN RECEH
+            # Pisahkan VENDOR (Kotak Penuh) dan RECEH
             for item in do_data["Items"]:
-                # Jika Status VENDOR (Kotak Penuh), LANGSUNG masuk final. Jangan digabung!
                 if item.get("Status") == "VENDOR":
-                    final.append(item)
+                    final.append(item) # Kotak penuh tidak digabung
                 else:
-                    # Jika RECEH, masukkan ke grup untuk dicampur
                     kat = item["Kategori"]
                     receh_groups.setdefault(kat, []).append(item)
                     
-            # 2. PROSES GROUPING RECEH
+            # Grouping RECEH sesuai batas kategori
             for kat, items in receh_groups.items():
-                max_qty = MaxReceh.get(kat, 999) # Target isi grup (misal Saus = 30)
+                max_qty = MaxReceh.get(kat, 999)
                 current_group, current_qty = [], 0
                 
                 for item in items:
                     qty = item["Qty"]
-                    item_max = item.get("MaxKoli", max_qty)
-                    
                     while qty > 0:
                         sisa = max_qty - current_qty
                         qty_masuk = min(qty, sisa)
-                        
                         new_item = item.copy()
                         new_item["Qty"] = qty_masuk
                         current_group.append(new_item)
-                        
                         current_qty += qty_masuk
                         qty -= qty_masuk
-                        
-                        # Jika grup sudah penuh sesuai target kategori
                         if current_qty >= max_qty:
                             final.extend(current_group)
                             current_group, current_qty = [], 0
-                            
-                # Sisa grup terakhir
                 if current_group:
                     final.extend(current_group)
                     
@@ -319,6 +374,9 @@ class PackingListEngine:
             }
         self.log(f"✅ Final Result: {len(self.FinalResult)} DO")
 
+    # ==========================================
+    # 7. EXPORT EXCEL (FILE 2 FORMATTING)
+    # ==========================================
     def export(self):
         self.log("📝 Exporting Excel...")
         out_wb = Workbook()
@@ -327,35 +385,39 @@ class PackingListEngine:
             ws = out_wb.active
             ws.title = "Info"
             ws["A1"] = "Tidak ada data Packing List yang bisa diproses."
-            ws["A2"] = "Cek kembali format Excel atau Master Data Anda."
             out_wb.save(self.output_file)
             return self.output_file
+            
         out_wb.remove(out_wb.active)
         thin = Side(style="thin")
         medium = Side(style="medium")
         border_thin = Border(left=thin, right=thin, top=thin, bottom=thin)
         border_medium = Border(left=medium, right=medium, top=medium, bottom=medium)
+        
         for do_no, data in self.FinalResult.items():
             sheet_name = self.SafeSheetName(data["Outlet"]) or "DO"
             base = sheet_name; n = 2
             while sheet_name in out_wb.sheetnames:
                 sheet_name = f"{base[:28]}_{n}"; n += 1
+                
             ws = out_wb.create_sheet(title=sheet_name)
             ws.column_dimensions["A"].width = 10
             ws.column_dimensions["B"].width = 38
             ws.column_dimensions["C"].width = 12
             ws.column_dimensions["D"].width = 14
             ws.column_dimensions["E"].width = 25
+            
             ws.merge_cells("A2:E2")
             ws["A2"] = "PACKING LIST"
             ws["A2"].font = Font(bold=True, size=18)
             ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
             ws.row_dimensions[2].height = 30
+            
             ws["A4"] = "DELIVERY\nORDER :"; ws["B4"] = do_no
             ws["D4"] = "Ship Via:"; ws["E4"] = data.get("ShipVia", "")
             ws["A5"] = "OUTLET :"; ws["B5"] = data["Outlet"]
             ws["A6"] = "DELIVERY\nDATE :"; ws["B6"] = data.get("Tanggal", "")
-            ws.merge_cells("B5:E5")
+            
             for row in range(4, 7):
                 ws.cell(row=row, column=1).font = Font(bold=True, size=12)
                 ws.cell(row=row, column=1).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -365,13 +427,13 @@ class PackingListEngine:
                 ws.cell(row=4, column=4).font = Font(bold=True, size=12)
                 ws.cell(row=4, column=5).font = Font(size=12)
             if data.get("Tanggal"):
-                try:
-                    ws["B6"].number_format = "dd-mm-yyyy"
-                except:
-                    pass
+                try: ws["B6"].number_format = "dd-mm-yyyy"
+                except: pass
+                
             ws.row_dimensions[4].height = 28
             ws.row_dimensions[5].height = 20
             ws.row_dimensions[6].height = 28
+            
             hr = 9
             for col, h in enumerate(["NO KOLI", "NAMA BARANG", "QTY", "UNIT", "NOTES"], 1):
                 c = ws.cell(row=hr, column=col, value=h)
@@ -379,6 +441,7 @@ class PackingListEngine:
                 c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
                 c.border = border_medium
             ws.row_dimensions[hr].height = 25
+            
             r = 10
             for item in data["Items"]:
                 ws.cell(row=r, column=2, value=item["NamaBarang"]).font = Font(size=12)
@@ -392,13 +455,18 @@ class PackingListEngine:
                 ws.cell(row=r, column=3).alignment = Alignment(horizontal="center")
                 ws.cell(row=r, column=4).alignment = Alignment(horizontal="center")
                 r += 1
+                
             ws.page_setup.orientation = "portrait"
             ws.page_setup.fitToWidth = 1
             ws.sheet_properties.pageSetUpPr.fitToPage = True
+            
         out_wb.save(self.output_file)
         self.log(f"✅ File tersimpan: {self.output_file}")
         return self.output_file
 
+    # ==========================================
+    # MAIN RUN
+    # ==========================================
     def run(self):
         self.logs = []
         self.wb = load_workbook(self.input_file, data_only=False)
