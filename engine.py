@@ -1,4 +1,4 @@
-# engine.py - UNIFIED PACKING LIST ENGINE (SUPPORT MULTI-FILE)
+# engine.py - UNIFIED PACKING LIST ENGINE (GLOBAL DO TRACKING)
 import os
 import math
 import copy
@@ -8,14 +8,15 @@ from openpyxl.styles import Font, Alignment, Border, Side
 
 
 class PackingListEngine:
-    def __init__(self, input_file, output_file, progress_callback=None, master_wb=None):
+    def __init__(self, input_file, output_file, progress_callback=None, master_wb=None, existing_do_groups=None):
         self.input_file = input_file
         self.output_file = output_file
         self.progress = progress_callback or (lambda msg: None)
-        self.master_wb = master_wb # Untuk menggabungkan banyak file
+        self.master_wb = master_wb
+        # PENTING: Gunakan data DO yang sudah ada dari file sebelumnya (Anti-Duplikat Lintas File)
+        self.DOGroups = OrderedDict(existing_do_groups) if existing_do_groups else OrderedDict()
         self.wb = None
         self.MasterData = {}
-        self.DOGroups = OrderedDict()
         self.TransformResult = OrderedDict()
         self.FinalResult = {}
         self.format_type = None
@@ -128,6 +129,11 @@ class PackingListEngine:
                 no_do = self.TxtRaw(no_do)
                 if no_do: last_do = no_do
             else: no_do = last_do
+            
+            # CEK DUPLIKAT DO DI SINI
+            if no_do and no_do in self.DOGroups:
+                continue # Skip baris ini jika DO sudah pernah diproses
+                
             tgl = cell("TANGGAL")
             if tgl is not None: last_tgl = tgl
             else: tgl = last_tgl
@@ -153,10 +159,11 @@ class PackingListEngine:
             if qty <= 0: continue
             unit = self.TxtRaw(cell("UNIT")) if "UNIT" in header_map else ""
             if not no_do: continue
+            
             if no_do not in self.DOGroups:
                 self.DOGroups[no_do] = {"Tanggal": tgl, "Outlet": gudang, "ShipVia": ship, "Items": []}
             self.DOGroups[no_do]["Items"].append({"Nama": nama, "Qty": qty, "Unit": unit})
-        self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
+        self.log(f"   ✅ DO unik terbaca: {len(self.DOGroups)}")
 
     def parse_delivery_order(self):
         self.log(f"   📄 Parsing sheet: '{self.target_sheet}'...")
@@ -173,6 +180,12 @@ class PackingListEngine:
             start, end = header_rows[i], header_rows[i + 1]
             nomor_do = self.TxtRaw(ws.cell(row=start, column=6).value)
             outlet = self.TxtRaw(ws.cell(row=start, column=13).value)
+            
+            # CEK DUPLIKAT DO DI SINI
+            if nomor_do in self.DOGroups:
+                self.log(f"   ️ Skip duplikat DO: {nomor_do} (Outlet: {outlet})")
+                continue
+                
             tanggal = ""
             if start + 1 < end:
                 tanggal_val = ws.cell(row=start+1, column=6).value
@@ -196,7 +209,7 @@ class PackingListEngine:
                 self.DOGroups[nomor_do]["Items"].append({
                     "Nama": nama, "Qty": qty, "Unit": unit_normalized
                 })
-        self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
+        self.log(f"   ✅ DO unik terbaca: {len(self.DOGroups)}")
 
     def get_rank(self, kategori):
         rank_map = {
@@ -267,7 +280,7 @@ class PackingListEngine:
         self.log(f"   ✅ Transform: {len(self.TransformResult)} DO")
 
     def group_receh(self):
-        self.log("    Grouping RECEH...")
+        self.log("   📦 Grouping RECEH...")
         MaxReceh = {"FROZEN RECEH": 35, "SAUS": 30, "KENTANG": 15, "PACKAGING": 60}
         for do_no, do_data in self.TransformResult.items():
             final, receh_groups = [], {}
@@ -299,8 +312,6 @@ class PackingListEngine:
 
     def export(self):
         self.log("   📝 Exporting Excel...")
-        
-        # Gunakan master_wb jika ada (untuk multi-file), jika tidak buat baru
         if self.master_wb is not None:
             out_wb = self.master_wb
         else:
@@ -322,7 +333,6 @@ class PackingListEngine:
         for do_no, data in self.FinalResult.items():
             sheet_name = self.SafeSheetName(data["Outlet"]) or "DO"
             base = sheet_name; n = 2
-            # Auto-rename jika nama sheet sudah ada (penting untuk multi-file!)
             while sheet_name in out_wb.sheetnames:
                 sheet_name = f"{base[:28]}_{n}"; n += 1
                 
