@@ -1,4 +1,4 @@
-# engine.py - UNIFIED PACKING LIST ENGINE (FIXED DOUBLE EXPORT)
+# engine.py - UNIFIED PACKING LIST ENGINE (SHEET NAME = OUTLET)
 import os
 import math
 import copy
@@ -76,7 +76,7 @@ class PackingListEngine:
         self.log(f"   ✅ Master Data: {len(self.MasterData)} item terbaca.")
 
     def detect_format(self):
-        self.log("   🔍 Mendeteksi format Delivery Order...")
+        self.log("    Mendeteksi format Delivery Order...")
         sheets = self.wb.sheetnames
         rincian_sheet = next((s for s in sheets if "Rincian" in s or "Pemindahan" in s), None)
         do_sheet = next((s for s in sheets if "Delivery Order" in s or "DO Detail" in s), None)
@@ -92,7 +92,7 @@ class PackingListEngine:
         self.log(f"    Format: {self.format_type} (Sheet: '{self.target_sheet}')")
 
     def parse_rincian(self):
-        self.log(f"   📄 Parsing sheet: '{self.target_sheet}'...")
+        self.log(f"    Parsing sheet: '{self.target_sheet}'...")
         ws = self.wb[self.target_sheet]
         header_keywords = {
             "DO": ["NOPEMINDAHAN", "NOPEMINDAHAN#", "NOMORPEMINDAHAN", "NOTRANSAKSI", "NOMORTRANSAKSI", "NO", "DO"],
@@ -298,7 +298,7 @@ class PackingListEngine:
         self.log(f"   ✅ Final Result: {len(self.FinalResult)} DO")
 
     def export(self):
-        self.log("    Exporting Excel...")
+        self.log("   📝 Exporting Excel...")
         if self.master_wb is not None:
             out_wb = self.master_wb
         else:
@@ -318,12 +318,14 @@ class PackingListEngine:
         border_medium = Border(left=medium, right=medium, top=medium, bottom=medium)
         
         for do_no, data in self.FinalResult.items():
-            # NAMA SHEET BERDASARKAN NOMOR DO (UNIK)
-            sheet_name = f"DO - {do_no}"
-            bad_chars = ['\\', '/', '*', '?', ':', '[', ']']
-            for c in bad_chars: sheet_name = sheet_name.replace(c, " ")
-            sheet_name = sheet_name[:31].strip()
-            
+            # ==========================================
+            # PERUBAHAN: NAMA SHEET = NAMA OUTLET
+            # ==========================================
+            sheet_name = self.SafeSheetName(data["Outlet"])
+            if not sheet_name:
+                sheet_name = "DO"
+                
+            # Jika nama outlet sama (1 outlet terima 2 DO beda), tambah _2, _3 dst
             base_name = sheet_name; n = 2
             while sheet_name in out_wb.sheetnames:
                 sheet_name = f"{base_name[:28]}_{n}"; n += 1
@@ -391,5 +393,3 @@ class PackingListEngine:
         else: self.parse_delivery_order()
         self.transform()
         self.group_receh()
-        # PENTING: JANGAN PANGGIL export() DI SINI!
-        # Export akan dipanggil dari app.py setelah filter duplikat
