@@ -1,4 +1,4 @@
-# engine.py - UNIFIED PACKING LIST ENGINE (SHEET NAME = OUTLET)
+# engine.py - UNIFIED PACKING LIST ENGINE (FINAL: SHEET = OUTLET)
 import os
 import math
 import copy
@@ -58,7 +58,7 @@ class PackingListEngine:
         return unit_upper
 
     def load_master_data(self):
-        self.log("   📚 Membaca Master Data...")
+        self.log("    Membaca Master Data...")
         master_sheet = next((s for s in self.wb.sheetnames if "Master Data" in s or "Master" in s), None)
         if not master_sheet:
             raise Exception(f"Sheet 'Master Data Packinglist' tidak ditemukan. Sheet yang ada: {self.wb.sheetnames}")
@@ -159,7 +159,7 @@ class PackingListEngine:
         self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
     def parse_delivery_order(self):
-        self.log(f"   📄 Parsing sheet: '{self.target_sheet}'...")
+        self.log(f"    Parsing sheet: '{self.target_sheet}'...")
         ws = self.wb[self.target_sheet]
         header_rows = []
         for r in range(1, ws.max_row + 1):
@@ -319,7 +319,7 @@ class PackingListEngine:
         
         for do_no, data in self.FinalResult.items():
             # ==========================================
-            # PERUBAHAN: NAMA SHEET = NAMA OUTLET
+            # INI BAGIAN PENTINGNYA: NAMA SHEET PAKAI OUTLET
             # ==========================================
             sheet_name = self.SafeSheetName(data["Outlet"])
             if not sheet_name:
