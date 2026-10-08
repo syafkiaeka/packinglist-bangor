@@ -1,4 +1,4 @@
-# engine.py - UNIFIED PACKING LIST ENGINE (GLOBAL DO TRACKING)
+# engine.py - UNIFIED PACKING LIST ENGINE (STABLE VERSION)
 import os
 import math
 import copy
@@ -8,15 +8,14 @@ from openpyxl.styles import Font, Alignment, Border, Side
 
 
 class PackingListEngine:
-    def __init__(self, input_file, output_file, progress_callback=None, master_wb=None, existing_do_groups=None):
+    def __init__(self, input_file, output_file, progress_callback=None, master_wb=None):
         self.input_file = input_file
         self.output_file = output_file
         self.progress = progress_callback or (lambda msg: None)
         self.master_wb = master_wb
-        # PENTING: Gunakan data DO yang sudah ada dari file sebelumnya (Anti-Duplikat Lintas File)
-        self.DOGroups = OrderedDict(existing_do_groups) if existing_do_groups else OrderedDict()
         self.wb = None
         self.MasterData = {}
+        self.DOGroups = OrderedDict()
         self.TransformResult = OrderedDict()
         self.FinalResult = {}
         self.format_type = None
@@ -90,10 +89,10 @@ class PackingListEngine:
             self.target_sheet = do_sheet
         else:
             raise Exception(f"Format DO tidak dikenali. Sheet: {sheets}")
-        self.log(f"   📄 Format: {self.format_type} (Sheet: '{self.target_sheet}')")
+        self.log(f"    Format: {self.format_type} (Sheet: '{self.target_sheet}')")
 
     def parse_rincian(self):
-        self.log(f"   📄 Parsing sheet: '{self.target_sheet}'...")
+        self.log(f"    Parsing sheet: '{self.target_sheet}'...")
         ws = self.wb[self.target_sheet]
         header_keywords = {
             "DO": ["NOPEMINDAHAN", "NOPEMINDAHAN#", "NOMORPEMINDAHAN", "NOTRANSAKSI", "NOMORTRANSAKSI", "NO", "DO"],
@@ -129,11 +128,6 @@ class PackingListEngine:
                 no_do = self.TxtRaw(no_do)
                 if no_do: last_do = no_do
             else: no_do = last_do
-            
-            # CEK DUPLIKAT DO DI SINI
-            if no_do and no_do in self.DOGroups:
-                continue # Skip baris ini jika DO sudah pernah diproses
-                
             tgl = cell("TANGGAL")
             if tgl is not None: last_tgl = tgl
             else: tgl = last_tgl
@@ -159,11 +153,10 @@ class PackingListEngine:
             if qty <= 0: continue
             unit = self.TxtRaw(cell("UNIT")) if "UNIT" in header_map else ""
             if not no_do: continue
-            
             if no_do not in self.DOGroups:
                 self.DOGroups[no_do] = {"Tanggal": tgl, "Outlet": gudang, "ShipVia": ship, "Items": []}
             self.DOGroups[no_do]["Items"].append({"Nama": nama, "Qty": qty, "Unit": unit})
-        self.log(f"   ✅ DO unik terbaca: {len(self.DOGroups)}")
+        self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
     def parse_delivery_order(self):
         self.log(f"   📄 Parsing sheet: '{self.target_sheet}'...")
@@ -180,12 +173,6 @@ class PackingListEngine:
             start, end = header_rows[i], header_rows[i + 1]
             nomor_do = self.TxtRaw(ws.cell(row=start, column=6).value)
             outlet = self.TxtRaw(ws.cell(row=start, column=13).value)
-            
-            # CEK DUPLIKAT DO DI SINI
-            if nomor_do in self.DOGroups:
-                self.log(f"   ️ Skip duplikat DO: {nomor_do} (Outlet: {outlet})")
-                continue
-                
             tanggal = ""
             if start + 1 < end:
                 tanggal_val = ws.cell(row=start+1, column=6).value
@@ -209,7 +196,7 @@ class PackingListEngine:
                 self.DOGroups[nomor_do]["Items"].append({
                     "Nama": nama, "Qty": qty, "Unit": unit_normalized
                 })
-        self.log(f"   ✅ DO unik terbaca: {len(self.DOGroups)}")
+        self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
     def get_rank(self, kategori):
         rank_map = {
