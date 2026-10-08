@@ -1,4 +1,4 @@
-# engine.py - FINAL UNIFIED ENGINE (NO GROUPING, NEW RANKING)
+# engine.py - FINAL UNIFIED ENGINE (EXACT RANKING & CATEGORY)
 import os
 import math
 import copy
@@ -198,8 +198,38 @@ class PackingListEngine:
                 })
         self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
+    # ==========================================
+    # FUNGSI RANKING & KATEGORI BARU (HARDCODED)
+    # ==========================================
+    def get_category_and_rank(self, kategori_asli, is_receh):
+        kat = self.Txt(kategori_asli)
+        
+        # Kelompokkan kategori "Lain-lain"
+        if kat in ["HAMPERS", "GRILL BOX", "INNER", "CRAZY BUCKET", "MINYAK", "BUTTER", "PACKAGING"]:
+            kat = "LAIN-LAIN"
+
+        if kat == "DAGING":
+            return ("Daging Receh", 2) if is_receh else ("Daging", 1)
+        elif kat == "FROZEN":
+            return ("Frozen Receh", 4) if is_receh else ("Frozen", 3)
+        elif kat == "KEJU":
+            return ("Keju Receh", 6) if is_receh else ("Keju", 5)
+        elif kat == "KENTANG":
+            return ("Kentang Receh", 8) if is_receh else ("Kentang", 7)
+        elif kat == "SAUS":
+            return ("Saus Receh", 10) if is_receh else ("Saus", 9)
+        elif kat == "DRY":
+            return ("Dry Receh", 12) if is_receh else ("Dry", 11)
+        elif kat == "LAIN-LAIN":
+            return ("Receh Lain-lain", 14) if is_receh else ("Lain-lain", 13)
+        elif kat in ["BUN", "ROTI"]:
+            return ("Bun", 15)
+        else:
+            # Fallback untuk kategori tidak dikenal
+            return (f"{kat} Receh" if is_receh else kat, 99)
+
     def transform(self):
-        self.log("   ️ Transforming data + Breakdown Koli...")
+        self.log("   ⚙️ Transforming data + Breakdown Koli...")
         for do_no, data in self.DOGroups.items():
             hasil = []
             for item in data["Items"]:
@@ -238,38 +268,14 @@ class PackingListEngine:
                     
                 if qty_koli_max <= 0: qty_koli_max = qty_max
                 
-                # BREAKDOWN KOLI & PENENTUAN KATEGORI/RECEH
+                # BREAKDOWN KOLI & PENENTUAN KATEGORI
                 while qty_real > 0.0001:
                     qty_koli = min(qty_real, qty_koli_max)
                     # Jika qty_koli kurang dari kapasitas maksimal, berarti RECEH
                     is_receh = qty_koli < (qty_koli_max - 0.0001)
                     
-                    # MAPPING KATEGORI & RANKING SESUAI PERMINTAAN
-                    kat_asli_upper = self.Txt(kategori_asli)
-                    if kat_asli_upper == "DAGING":
-                        out_kat = "DAGING RECEH" if is_receh else "DAGING"
-                        rank = 2 if is_receh else 1
-                    elif kat_asli_upper == "FROZEN":
-                        out_kat = "FROZEN RECEH" if is_receh else "FROZEN"
-                        rank = 4 if is_receh else 3
-                    elif kat_asli_upper == "KENTANG":
-                        out_kat = "KENTANG RECEH" if is_receh else "KENTANG"
-                        rank = 6 if is_receh else 5
-                    elif kat_asli_upper == "SAUS":
-                        out_kat = "SAUS RECEH" if is_receh else "SAUS"
-                        rank = 8 if is_receh else 7
-                    elif kat_asli_upper in ["DRY", "PACKAGING"]:
-                        out_kat = "PACKAGING RECEH" if is_receh else "PACKAGING"
-                        rank = 10 if is_receh else 9
-                    elif kat_asli_upper in ["BUN", "ROTI"]:
-                        out_kat = "ROTI"
-                        rank = 11
-                    elif kat_asli_upper == "KEJU": # Fallback untuk Keju
-                        out_kat = "KEJU RECEH" if is_receh else "KEJU"
-                        rank = 13 if is_receh else 12
-                    else:
-                        out_kat = kategori_asli
-                        rank = 99
+                    # PANGGIL FUNGSI RANKING BARU
+                    out_kat, rank = self.get_category_and_rank(kategori_asli, is_receh)
 
                     hasil.append({
                         "NamaBarang": nama, "Qty": qty_koli, "Unit": unit_out, 
@@ -286,7 +292,7 @@ class PackingListEngine:
 
     def group_receh(self):
         self.log("   📦 Finalizing (Tanpa Grouping MaxReceh)...")
-        # LANGSUNG COPY DARI TRANSFORM KE FINAL RESULT (TIDAK ADA GROUPING)
+        # LANGSUNG COPY DARI TRANSFORM KE FINAL RESULT
         for do_no, do_data in self.TransformResult.items():
             self.FinalResult[do_no] = {
                 "Outlet": do_data["Outlet"], 
