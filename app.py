@@ -20,7 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("""
-<div class="bangor-header">
+<div class="packinglist-header">
     <h1>📦 Packinglist Generator - Logistic </h1>
     <p>Sistem Generator Packing List Otomatis (Multi-File)</p>
 </div>
