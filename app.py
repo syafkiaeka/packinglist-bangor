@@ -5,7 +5,7 @@ import tempfile
 from collections import OrderedDict
 from engine import PackingListEngine
 
-st.set_page_config(page_title="PT Bangor - Packing List Generator", page_icon="📦", layout="wide")
+st.set_page_config(page_title="Logistik- Packing List Generator", page_icon="📦", layout="wide")
 
 st.markdown("""
 <style>
