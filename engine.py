@@ -199,7 +199,7 @@ class PackingListEngine:
         self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
     # ==========================================
-    # FUNGSI RANKING & KATEGORI (BUTTER RANK 11)
+    # FUNGSI RANKING & KATEGORI 
     # ==========================================
     def get_category_and_rank(self, kategori_asli, is_receh):
         kat = self.Txt(kategori_asli)
