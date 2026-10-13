@@ -1,4 +1,4 @@
-# app.py - PT BANGOR PACKING LIST GENERATOR (FINAL FIXED)
+# app.py - PACKING LIST GENERATOR (FINAL FIXED)
 import streamlit as st
 import os
 import tempfile
