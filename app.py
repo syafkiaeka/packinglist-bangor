@@ -1,4 +1,4 @@
-# app.py - PT BANGOR PACKING LIST GENERATOR
+# app.py - PT BANGOR PACKING LIST GENERATOR (WITH DO/IT COUNTER)
 import streamlit as st
 import os
 import tempfile
@@ -6,8 +6,8 @@ from collections import OrderedDict
 from engine import PackingListEngine
 
 st.set_page_config(
-    page_title="Bangor - Packing List Generator", 
-    page_icon="📦", 
+    page_title="PT Bangor - Packing List Generator", 
+    page_icon="", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -34,6 +34,14 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e9ecef;
         margin-bottom: 20px; height: 100%;
     }
+    
+    .stat-box {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 8px; padding: 15px; margin-bottom: 10px;
+        border-left: 4px solid #003366;
+    }
+    .stat-box .label { font-size: 12px; color: #6c757d; margin-bottom: 5px; }
+    .stat-box .value { font-size: 24px; font-weight: 700; color: #003366; }
     
     .stButton>button {
         background-color: #003366; color: white; border-radius: 8px; padding: 12px 24px;
@@ -96,7 +104,7 @@ with col_status:
         st.caption("Klik tombol di bawah untuk mulai memproses semua file secara bersamaan.")
         
         generate_clicked = st.button(
-            "🚀 MULAI GENERATE PACKING LIST", 
+            "🚀 GENERATE PACKING LIST", 
             type="primary", 
             use_container_width=True
         )
@@ -104,13 +112,15 @@ with col_status:
         st.metric(label="Total File Diupload", value="-")
         st.divider()
         st.caption("Silakan upload file Excel terlebih dahulu untuk mengaktifkan tombol Generate.")
-        st.button("🚀 GENERATE PACKING LIST", disabled=True, use_container_width=True)
+        st.button("🚀 MULAI GENERATE PACKING LIST", disabled=True, use_container_width=True)
         
     st.markdown('</div>', unsafe_allow_html=True)
 
 if uploaded and generate_clicked:
     master_wb = None
     total_do = 0
+    total_it = 0
+    total_items = 0
     processed_do_set = set()
     
     st.divider()
@@ -119,10 +129,13 @@ if uploaded and generate_clicked:
     status_text = st.empty()
     log_box = st.code("", language="text", height=150)
     
+    # Container untuk statistik real-time
+    stats_container = st.container()
+    
     logs = []
     def cb(msg):
         logs.append(msg)
-        log_box.text("\n".join(logs[-5:]))
+        log_box.text("\n".join(logs[-8:]))
 
     try:
         total_files = len(uploaded)
@@ -140,6 +153,21 @@ if uploaded and generate_clicked:
             engine = PackingListEngine(tmp_in_path, tmp_out_path, progress_callback=cb, master_wb=master_wb)
             engine.run()
             
+            # Tambahkan statistik
+            total_do += engine.stats.get("do_count", 0)
+            total_it += engine.stats.get("it_count", 0)
+            total_items += engine.stats.get("item_count", 0)
+            
+            # Tampilkan statistik real-time
+            with stats_container:
+                col_a, col_b, col_c = st.columns(3)
+                with col_a:
+                    st.markdown(f'<div class="stat-box"><div class="label">📄 DO Terproses</div><div class="value">{total_do}</div></div>', unsafe_allow_html=True)
+                with col_b:
+                    st.markdown(f'<div class="stat-box"><div class="label">📋 IT Terproses</div><div class="value">{total_it}</div></div>', unsafe_allow_html=True)
+                with col_c:
+                    st.markdown(f'<div class="stat-box"><div class="label"> Total Item</div><div class="value">{total_items}</div></div>', unsafe_allow_html=True)
+            
             unique_final_result = OrderedDict()
             for do_no, data in engine.FinalResult.items():
                 if do_no not in processed_do_set:
@@ -149,7 +177,6 @@ if uploaded and generate_clicked:
             engine.FinalResult = unique_final_result
             
             master_wb = engine.export()
-            total_do += len(unique_final_result)
             
             if os.path.exists(tmp_in_path): os.remove(tmp_in_path)
             if os.path.exists(tmp_out_path): os.remove(tmp_out_path)
@@ -168,11 +195,10 @@ if uploaded and generate_clicked:
         <!DOCTYPE html><html><head><style>body{margin:0;padding:0;overflow:hidden;background:transparent}.falling-item{position:absolute;top:-50px;font-size:2.5rem;animation:fall linear forwards}@keyframes fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}</style></head><body><script>const emojis=['🍔','🍟','','🍗'];for(let i=0;i<50;i++){let el=document.createElement('div');el.className='falling-item';el.innerText=emojis[Math.floor(Math.random()*emojis.length)];el.style.left=Math.random()*100+'vw';el.style.animationDuration=(Math.random()*3+2)+'s';el.style.animationDelay=Math.random()*2+'s';document.body.appendChild(el);}setTimeout(()=>{document.body.innerHTML='';},6000);</script></body></html>"""
         st.markdown(f'<iframe srcdoc="{burger_html}" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99999;border:none;" sandbox="allow-scripts"></iframe>', unsafe_allow_html=True)
 
-        # TOMBOL DOWNLOAD LANGSUNG DI SINI (TANPA CONTAINER)
-        st.success(f"**BERHASIL!** Total **{total_do} Delivery Order Unik** dari {len(uploaded)} file telah digabung.")
+        st.success(f"**BERHASIL!** Total **{total_do + total_it} Delivery Order/IT** dari {len(uploaded)} file telah digabung.")
         
         st.download_button(
-            label="⬇️ DOWNLOAD PACKINGLIST (.xlsx)",
+            label="⬇️ Download Packinglist (.xlsx)",
             data=data,
             file_name=f"PACKINGLIST_GABUNGAN_{len(uploaded)}FILE.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -190,7 +216,7 @@ if uploaded and generate_clicked:
 
 st.markdown("""
 <div class="app-footer">
-    &copy; 2026 Bangor - Internal Logistics System v3.5<br>
+    &copy; 2026 Bangor - Internal Logistics System v3.6<br>
     Developed for Warehouse Operations Team
 </div>
 """, unsafe_allow_html=True)
