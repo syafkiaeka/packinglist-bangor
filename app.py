@@ -1,4 +1,4 @@
-# engine.py - UNIFIED PACKING LIST ENGINE (3 FORMAT SUPPORT)
+# engine.py - UNIFIED PACKING LIST ENGINE
 import os
 import math
 import copy
@@ -58,7 +58,7 @@ class PackingListEngine:
         return unit_upper
 
     def load_master_data(self):
-        self.log("   📚 Membaca Master Data...")
+        self.log("   Membaca Master Data...")
         master_sheet = next((s for s in self.wb.sheetnames if "Master Data" in s or "Master" in s), None)
         if not master_sheet:
             raise Exception(f"Sheet 'Master Data Packinglist' tidak ditemukan. Sheet yang ada: {self.wb.sheetnames}")
@@ -76,15 +76,12 @@ class PackingListEngine:
         self.log(f"   ✅ Master Data: {len(self.MasterData)} item terbaca.")
 
     def detect_format(self):
-        self.log("    Mendeteksi format Delivery Order...")
+        self.log("   Mendeteksi format Delivery Order...")
         sheets = self.wb.sheetnames
         
-        # Cek Format 1: Rincian Pemindahan Barang (IT lama)
         rincian_sheet = next((s for s in sheets if "Rincian" in s and "Pemindahan" in s), None)
-        # Cek Format 2: Delivery Order Detail (Inggris)
-        do_sheet = next((s for s in sheets if "Delivery Order" in s or "DO Detail" in s), None)
-        # Cek Format 3: Rincian Pengiriman Pesanan (Indonesia baru - ACCURATE)
         pengiriman_sheet = next((s for s in sheets if "Rincian" in s and "Pengiriman" in s), None)
+        do_sheet = next((s for s in sheets if "Delivery Order" in s or "DO Detail" in s), None)
 
         if rincian_sheet:
             self.format_type = "Rincian"
@@ -93,7 +90,7 @@ class PackingListEngine:
         elif pengiriman_sheet:
             self.format_type = "Pengiriman"
             self.target_sheet = pengiriman_sheet
-            self.log(f"    Format: Rincian Pengiriman Pesanan (Indonesia/ACCURATE)")
+            self.log(f"   📄 Format: Rincian Pengiriman Pesanan (Indonesia/ACCURATE)")
         elif do_sheet:
             self.format_type = "DeliveryOrder"
             self.target_sheet = do_sheet
@@ -103,7 +100,7 @@ class PackingListEngine:
         self.log(f"   📄 Sheet: '{self.target_sheet}'")
 
     def parse_rincian(self):
-        self.log(f"    Parsing sheet: '{self.target_sheet}'...")
+        self.log(f"   Parsing sheet: '{self.target_sheet}'...")
         ws = self.wb[self.target_sheet]
         header_keywords = {
             "DO": ["NOPEMINDAHAN", "NOPEMINDAHAN#", "NOMORPEMINDAHAN", "NOTRANSAKSI", "NOMORTRANSAKSI", "NO", "DO"],
@@ -123,9 +120,11 @@ class PackingListEngine:
                 for field, kws in header_keywords.items():
                     for kw in kws:
                         if norm == self.NormalizeHeader(kw):
-                            kandidat[field] = c; break
+                            kandidat[field] = c
+                            break
             if "NAMA" in kandidat and "QTY" in kandidat:
-                header_row, header_map = r, kandidat; break
+                header_row, header_map = r, kandidat
+                break
                 
         if not header_row:
             raise Exception(f"Header tidak ditemukan.")
@@ -171,10 +170,9 @@ class PackingListEngine:
 
     def parse_pengiriman(self):
         """Parser untuk Rincian Pengiriman Pesanan (format ACCURATE Indonesia)"""
-        self.log(f"    Parsing sheet: '{self.target_sheet}' (Format ACCURATE)...")
+        self.log(f"   Parsing sheet: '{self.target_sheet}' (Format ACCURATE)...")
         ws = self.wb[self.target_sheet]
         
-        # Cari semua baris yang mengandung "Nomor #" di kolom B
         do_start_rows = []
         for r in range(1, ws.max_row + 1):
             val_b = self.Txt(ws.cell(row=r, column=2).value)
@@ -187,13 +185,11 @@ class PackingListEngine:
         self.log(f"   -> Ditemukan {len(do_start_rows)} blok DO.")
         
         for idx, start_row in enumerate(do_start_rows):
-            # Tentukan end_row (baris sebelum DO berikutnya atau end of sheet)
             if idx + 1 < len(do_start_rows):
                 end_row = do_start_rows[idx + 1]
             else:
                 end_row = ws.max_row + 1
             
-            # Baca Nomor DO (kolom E, setelah "Nomor # :")
             nomor_do = ""
             for c in range(3, 10):
                 val = ws.cell(row=start_row, column=c).value
@@ -203,7 +199,6 @@ class PackingListEngine:
                         nomor_do = val_str
                         break
             
-            # Baca Pelanggan/Outlet (kolom M, setelah "Pelanggan :")
             outlet = ""
             for c in range(10, 20):
                 val = ws.cell(row=start_row, column=c).value
@@ -213,7 +208,6 @@ class PackingListEngine:
                         outlet = val_str
                         break
             
-            # Baca Tanggal (baris setelah start_row, kolom E)
             tanggal = ""
             for r in range(start_row + 1, min(start_row + 5, end_row)):
                 val_b = self.Txt(ws.cell(row=r, column=2).value)
@@ -225,14 +219,12 @@ class PackingListEngine:
                             break
                     break
             
-            # Baca Ship Via (jika ada)
             ship_via = ""
             
             if not nomor_do: continue
             
             self.DOGroups[nomor_do] = {"Outlet": outlet, "Tanggal": tanggal, "ShipVia": ship_via, "Items": []}
             
-            # Cari header item (baris dengan "Kode #" di kolom C)
             item_header_row = None
             for r in range(start_row + 1, min(start_row + 10, end_row)):
                 val_c = self.Txt(ws.cell(row=r, column=3).value)
@@ -242,10 +234,8 @@ class PackingListEngine:
             
             if not item_header_row: continue
             
-            # Baca item data
             for r in range(item_header_row + 1, end_row):
-                # Skip jika baris kosong atau total
-                val_l = ws.cell(row=r, column=12).value  # Kolom L (Kuantitas)
+                val_l = ws.cell(row=r, column=12).value
                 if val_l is None: continue
                 try:
                     qty = float(val_l)
@@ -253,11 +243,11 @@ class PackingListEngine:
                     continue
                 if qty <= 0: continue
                 
-                nama = self.TxtRaw(ws.cell(row=r, column=6).value)  # Kolom F (Nama Barang)
+                nama = self.TxtRaw(ws.cell(row=r, column=6).value)
                 if not nama or nama.upper() == "NAMA BARANG": continue
                 if "DUS" in self.Txt(nama): continue
                 
-                unit = self.TxtRaw(ws.cell(row=r, column=15).value)  # Kolom O (Satuan)
+                unit = self.TxtRaw(ws.cell(row=r, column=15).value)
                 unit_normalized = self.NormalizeUnit(unit)
                 
                 self.DOGroups[nomor_do]["Items"].append({
@@ -267,7 +257,7 @@ class PackingListEngine:
         self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
     def parse_delivery_order(self):
-        self.log(f"    Parsing sheet: '{self.target_sheet}'...")
+        self.log(f"   Parsing sheet: '{self.target_sheet}'...")
         ws = self.wb[self.target_sheet]
         header_rows = []
         for r in range(1, ws.max_row + 1):
@@ -334,7 +324,7 @@ class PackingListEngine:
             return (f"{kat} Receh" if is_receh else kat, 99)
 
     def transform(self):
-        self.log("   ⚙️ Transforming data + Breakdown Koli...")
+        self.log("   Transforming data + Breakdown Koli...")
         for do_no, data in self.DOGroups.items():
             hasil = []
             for item in data["Items"]:
@@ -391,7 +381,7 @@ class PackingListEngine:
         self.log(f"   ✅ Transform: {len(self.TransformResult)} DO")
 
     def group_receh(self):
-        self.log("   📦 Finalizing (Tanpa Grouping MaxReceh)...")
+        self.log("   Finalizing (Tanpa Grouping MaxReceh)...")
         for do_no, do_data in self.TransformResult.items():
             self.FinalResult[do_no] = {
                 "Outlet": do_data["Outlet"], 
@@ -402,7 +392,7 @@ class PackingListEngine:
         self.log(f"   ✅ Final Result: {len(self.FinalResult)} DO")
 
     def export(self):
-        self.log("   📝 Exporting Excel...")
+        self.log("   Exporting Excel...")
         if self.master_wb is not None:
             out_wb = self.master_wb
         else:
@@ -412,12 +402,14 @@ class PackingListEngine:
         if not self.FinalResult:
             self.log("   ⚠️ Tidak ada data DO yang berhasil diproses.")
             if self.master_wb is None:
-                ws = out_wb.active; ws.title = "Info"
+                ws = out_wb.active
+                ws.title = "Info"
                 ws["A1"] = "Tidak ada data Packing List yang bisa diproses."
                 out_wb.save(self.output_file)
             return out_wb
             
-        thin = Side(style="thin"); medium = Side(style="medium")
+        thin = Side(style="thin")
+        medium = Side(style="medium")
         border_thin = Border(left=thin, right=thin, top=thin, bottom=thin)
         border_medium = Border(left=medium, right=medium, top=medium, bottom=medium)
         
@@ -425,22 +417,33 @@ class PackingListEngine:
             sheet_name = self.SafeSheetName(data["Outlet"])
             if not sheet_name: sheet_name = "DO"
             
-            base_name = sheet_name; n = 2
+            base_name = sheet_name
+            n = 2
             while sheet_name in out_wb.sheetnames:
-                sheet_name = f"{base_name[:28]}_{n}"; n += 1
+                sheet_name = f"{base_name[:28]}_{n}"
+                n += 1
                 
             ws = out_wb.create_sheet(title=sheet_name)
-            ws.column_dimensions["A"].width = 10; ws.column_dimensions["B"].width = 38
-            ws.column_dimensions["C"].width = 12; ws.column_dimensions["D"].width = 14; ws.column_dimensions["E"].width = 25
+            ws.column_dimensions["A"].width = 10
+            ws.column_dimensions["B"].width = 38
+            ws.column_dimensions["C"].width = 12
+            ws.column_dimensions["D"].width = 14
+            ws.column_dimensions["E"].width = 25
             
-            ws.merge_cells("A2:E2"); ws["A2"] = "PACKING LIST"
-            ws["A2"].font = Font(bold=True, size=18); ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
+            ws.merge_cells("A2:E2")
+            ws["A2"] = "PACKING LIST"
+            ws["A2"].font = Font(bold=True, size=18)
+            ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
             ws.row_dimensions[2].height = 30
             
-            ws["A4"] = "DELIVERY\nORDER :"; ws["B4"] = do_no
-            ws["D4"] = "Ship Via:"; ws["E4"] = data.get("ShipVia", "")
-            ws["A5"] = "OUTLET :"; ws["B5"] = data["Outlet"]
-            ws["A6"] = "DELIVERY\nDATE :"; ws["B6"] = data.get("Tanggal", "")
+            ws["A4"] = "DELIVERY\nORDER :"
+            ws["B4"] = do_no
+            ws["D4"] = "Ship Via:"
+            ws["E4"] = data.get("ShipVia", "")
+            ws["A5"] = "OUTLET :"
+            ws["B5"] = data["Outlet"]
+            ws["A6"] = "DELIVERY\nDATE :"
+            ws["B6"] = data.get("Tanggal", "")
             
             for row in range(4, 7):
                 ws.cell(row=row, column=1).font = Font(bold=True, size=12)
@@ -451,15 +454,20 @@ class PackingListEngine:
                 ws.cell(row=4, column=4).font = Font(bold=True, size=12)
                 ws.cell(row=4, column=5).font = Font(size=12)
             if data.get("Tanggal"):
-                try: ws["B6"].number_format = "dd-mm-yyyy"
-                except: pass
+                try:
+                    ws["B6"].number_format = "dd-mm-yyyy"
+                except:
+                    pass
                 
-            ws.row_dimensions[4].height = 28; ws.row_dimensions[5].height = 20; ws.row_dimensions[6].height = 28
+            ws.row_dimensions[4].height = 28
+            ws.row_dimensions[5].height = 20
+            ws.row_dimensions[6].height = 28
             
             hr = 9
             for col, h in enumerate(["NO KOLI", "NAMA BARANG", "QTY", "UNIT", "NOTES"], 1):
                 c = ws.cell(row=hr, column=col, value=h)
-                c.font = Font(bold=True, size=12); c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                c.font = Font(bold=True, size=12)
+                c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
                 c.border = border_medium
             ws.row_dimensions[hr].height = 25
             
@@ -469,13 +477,16 @@ class PackingListEngine:
                 ws.cell(row=r, column=3, value=item["Qty"]).font = Font(size=12)
                 ws.cell(row=r, column=4, value=item["Unit"]).font = Font(size=12)
                 for col in range(1, 6):
-                    cell = ws.cell(row=r, column=col); cell.border = border_thin; cell.font = Font(size=12)
+                    cell = ws.cell(row=r, column=col)
+                    cell.border = border_thin
+                    cell.font = Font(size=12)
                 ws.cell(row=r, column=1).alignment = Alignment(horizontal="center")
                 ws.cell(row=r, column=3).alignment = Alignment(horizontal="center")
                 ws.cell(row=r, column=4).alignment = Alignment(horizontal="center")
                 r += 1
                 
-            ws.page_setup.orientation = "portrait"; ws.page_setup.fitToWidth = 1
+            ws.page_setup.orientation = "portrait"
+            ws.page_setup.fitToWidth = 1
             ws.sheet_properties.pageSetUpPr.fitToPage = True
             
         if self.master_wb is None:
@@ -488,8 +499,11 @@ class PackingListEngine:
         self.wb = load_workbook(self.input_file, data_only=False)
         self.load_master_data()
         self.detect_format()
-        if self.format_type == "Rincian": self.parse_rincian()
-        elif self.format_type == "Pengiriman": self.parse_pengiriman()
-        else: self.parse_delivery_order()
+        if self.format_type == "Rincian":
+            self.parse_rincian()
+        elif self.format_type == "Pengiriman":
+            self.parse_pengiriman()
+        else:
+            self.parse_delivery_order()
         self.transform()
         self.group_receh()
