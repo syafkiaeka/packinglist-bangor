@@ -57,7 +57,7 @@ col_input, col_status = st.columns([1.8, 1])
 
 with col_input:
     st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-    st.subheader(" Upload Delivery Order")
+    st.subheader("📤 Upload Delivery Order")
     st.caption("Upload satu atau banyak file Excel (.xlsx / .xlsm) sekaligus. Sistem akan otomatis menggabungkan dan menyaring duplikat.")
     
     uploaded = st.file_uploader(
@@ -82,7 +82,7 @@ with col_input:
             for f in uploaded:
                 st.text(f"📄 {f.name} ({round(f.size / 1024, 2)} KB)")
     else:
-        st.info(" Belum ada file yang dipilih")
+        st.info("⏳ Belum ada file yang dipilih")
         
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -96,7 +96,7 @@ with col_status:
         st.caption("Klik tombol di bawah untuk mulai memproses semua file secara bersamaan.")
         
         generate_clicked = st.button(
-            " MULAI GENERATE PACKING LIST", 
+            "🚀 MULAI GENERATE PACKING LIST", 
             type="primary", 
             use_container_width=True
         )
@@ -104,7 +104,7 @@ with col_status:
         st.metric(label="Total File Diupload", value="-")
         st.divider()
         st.caption("Silakan upload file Excel terlebih dahulu untuk mengaktifkan tombol Generate.")
-        st.button("🚀 MULAI GENERATE PACKING LIST", disabled=True, use_container_width=True)
+        st.button("🚀 GENERATE PACKING LIST", disabled=True, use_container_width=True)
         
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -113,88 +113,80 @@ if uploaded and generate_clicked:
     total_do = 0
     processed_do_set = set()
     
-    progress_container = st.container()
-    result_container = st.empty()
+    st.divider()
+    st.subheader("⚙️ Sedang Memproses...")
+    progress_bar = st.progress(0.0)
+    status_text = st.empty()
+    log_box = st.code("", language="text", height=150)
     
-    with progress_container:
-        st.divider()
-        st.subheader("⚙️ Sedang Memproses...")
-        progress_bar = st.progress(0.0)  # FIX: harus 0.0 bukan 0
-        status_text = st.empty()
-        log_box = st.code("", language="text", height=150)
+    logs = []
+    def cb(msg):
+        logs.append(msg)
+        log_box.text("\n".join(logs[-5:]))
+
+    try:
+        total_files = len(uploaded)
         
-        logs = []
-        def cb(msg):
-            logs.append(msg)
-            log_box.text("\n".join(logs[-5:]))
-
-        try:
-            total_files = len(uploaded)
+        for idx, up_file in enumerate(uploaded):
+            current_progress = (idx + 1) / total_files
+            progress_bar.progress(current_progress)
+            status_text.text(f"Memproses file {idx+1}/{total_files}: **{up_file.name}**")
             
-            for idx, up_file in enumerate(uploaded):
-                # FIX: progress harus antara 0.0 - 1.0, bukan 0-100
-                current_progress = (idx + 1) / total_files
-                progress_bar.progress(current_progress)
-                status_text.text(f"Memproses file {idx+1}/{total_files}: **{up_file.name}**")
-                
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_in:
-                    tmp_in.write(up_file.getvalue())
-                    tmp_in_path = tmp_in.name
-                tmp_out_path = tmp_in_path.replace(".xlsx", "_temp.xlsx")
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_in:
+                tmp_in.write(up_file.getvalue())
+                tmp_in_path = tmp_in.name
+            tmp_out_path = tmp_in_path.replace(".xlsx", "_temp.xlsx")
 
-                engine = PackingListEngine(tmp_in_path, tmp_out_path, progress_callback=cb, master_wb=master_wb)
-                engine.run()
-                
-                unique_final_result = OrderedDict()
-                for do_no, data in engine.FinalResult.items():
-                    if do_no not in processed_do_set:
-                        unique_final_result[do_no] = data
-                        processed_do_set.add(do_no)
-                
-                engine.FinalResult = unique_final_result
-                
-                master_wb = engine.export()
-                total_do += len(unique_final_result)
-                
-                if os.path.exists(tmp_in_path): os.remove(tmp_in_path)
-                if os.path.exists(tmp_out_path): os.remove(tmp_out_path)
-
-            final_out_path = tempfile.mktemp(suffix=".xlsx")
-            master_wb.save(final_out_path)
-
-            with open(final_out_path, "rb") as f:
-                data = f.read()
-
-            # FIX: progress 1.0 bukan 100
-            progress_bar.progress(1.0)
-            status_text.text("✅ Semua file berhasil diproses!")
+            engine = PackingListEngine(tmp_in_path, tmp_out_path, progress_callback=cb, master_wb=master_wb)
+            engine.run()
             
-            burger_html = """
-            <!DOCTYPE html><html><head><style>body{margin:0;padding:0;overflow:hidden;background:transparent}.falling-item{position:absolute;top:-50px;font-size:2.5rem;animation:fall linear forwards}@keyframes fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}</style></head><body><script>const emojis=['🍔','','🥤','🍗'];for(let i=0;i<50;i++){let el=document.createElement('div');el.className='falling-item';el.innerText=emojis[Math.floor(Math.random()*emojis.length)];el.style.left=Math.random()*100+'vw';el.style.animationDuration=(Math.random()*3+2)+'s';el.style.animationDelay=Math.random()*2+'s';document.body.appendChild(el);}setTimeout(()=>{document.body.innerHTML='';},6000);</script></body></html>"""
-            st.markdown(f'<iframe srcdoc="{burger_html}" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99999;border:none;" sandbox="allow-scripts"></iframe>', unsafe_allow_html=True)
+            unique_final_result = OrderedDict()
+            for do_no, data in engine.FinalResult.items():
+                if do_no not in processed_do_set:
+                    unique_final_result[do_no] = data
+                    processed_do_set.add(do_no)
+            
+            engine.FinalResult = unique_final_result
+            
+            master_wb = engine.export()
+            total_do += len(unique_final_result)
+            
+            if os.path.exists(tmp_in_path): os.remove(tmp_in_path)
+            if os.path.exists(tmp_out_path): os.remove(tmp_out_path)
 
-            with result_container:
-                st.balloons()
-                st.markdown('<div class="dashboard-card" style="border-left: 5px solid #10b981;">', unsafe_allow_html=True)
-                st.success(f"**BERHASIL!** Total **{total_do} Delivery Order Unik** dari {len(uploaded)} file telah digabung.")
-                
-                st.download_button(
-                    label="⬇️ DOWNLOAD HASIL GABUNGAN (.xlsx)",
-                    data=data,
-                    file_name=f"PACKINGLIST{len(uploaded)}FILE.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    type="primary"
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-        except Exception as e:
-            progress_bar.progress(0.0)
-            status_text.text("❌ Terjadi kesalahan!")
-            st.error(f"**GAGAL MEMPROSES:** {e}")
-        finally:
-            if 'final_out_path' in locals() and os.path.exists(final_out_path): 
-                os.remove(final_out_path)
+        final_out_path = tempfile.mktemp(suffix=".xlsx")
+        master_wb.save(final_out_path)
+
+        with open(final_out_path, "rb") as f:
+            data = f.read()
+
+        progress_bar.progress(1.0)
+        status_text.text("✅ Semua file berhasil diproses!")
+        
+        # Animasi Burger Hujan
+        burger_html = """
+        <!DOCTYPE html><html><head><style>body{margin:0;padding:0;overflow:hidden;background:transparent}.falling-item{position:absolute;top:-50px;font-size:2.5rem;animation:fall linear forwards}@keyframes fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}</style></head><body><script>const emojis=['🍔','🍟','','🍗'];for(let i=0;i<50;i++){let el=document.createElement('div');el.className='falling-item';el.innerText=emojis[Math.floor(Math.random()*emojis.length)];el.style.left=Math.random()*100+'vw';el.style.animationDuration=(Math.random()*3+2)+'s';el.style.animationDelay=Math.random()*2+'s';document.body.appendChild(el);}setTimeout(()=>{document.body.innerHTML='';},6000);</script></body></html>"""
+        st.markdown(f'<iframe srcdoc="{burger_html}" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99999;border:none;" sandbox="allow-scripts"></iframe>', unsafe_allow_html=True)
+
+        # TOMBOL DOWNLOAD LANGSUNG DI SINI (TANPA CONTAINER)
+        st.success(f"**BERHASIL!** Total **{total_do} Delivery Order Unik** dari {len(uploaded)} file telah digabung.")
+        
+        st.download_button(
+            label="⬇️ DOWNLOAD PACKINGLIST (.xlsx)",
+            data=data,
+            file_name=f"PACKINGLIST_GABUNGAN_{len(uploaded)}FILE.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            type="primary"
+        )
+            
+    except Exception as e:
+        progress_bar.progress(0.0)
+        status_text.text("❌ Terjadi kesalahan!")
+        st.error(f"**GAGAL MEMPROSES:** {e}")
+    finally:
+        if 'final_out_path' in locals() and os.path.exists(final_out_path): 
+            os.remove(final_out_path)
 
 st.markdown("""
 <div class="app-footer">
