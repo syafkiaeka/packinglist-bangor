@@ -1,4 +1,4 @@
-# engine.py - UNIFIED PACKING LIST ENGINE
+# engine.py - UNIFIED PACKING LIST ENGINE (FIXED ACCURATE PARSER)
 import os
 import math
 import copy
@@ -100,7 +100,7 @@ class PackingListEngine:
         self.log(f"   📄 Sheet: '{self.target_sheet}'")
 
     def parse_rincian(self):
-        self.log(f"   📄 Parsing sheet: '{self.target_sheet}'...")
+        self.log(f"    Parsing sheet: '{self.target_sheet}'...")
         ws = self.wb[self.target_sheet]
         header_keywords = {
             "DO": ["NOPEMINDAHAN", "NOPEMINDAHAN#", "NOMORPEMINDAHAN", "NOTRANSAKSI", "NOMORTRANSAKSI", "NO", "DO"],
@@ -169,66 +169,124 @@ class PackingListEngine:
         self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
     def parse_pengiriman(self):
-        """Parser spesifik untuk Rincian Pengiriman Pesanan (ACCURATE)"""
-        self.log(f"    Parsing sheet: '{self.target_sheet}' (Format ACCURATE)...")
+        """Parser untuk Rincian Pengiriman Pesanan (format ACCURATE Indonesia)"""
+        self.log(f"   📄 Parsing sheet: '{self.target_sheet}' (Format ACCURATE)...")
         ws = self.wb[self.target_sheet]
         
-        # 1. Cari semua baris yang mengandung "NOMOR #" di Kolom B
+        # CARI HEADER "Nomor #" - lebih fleksibel, cukup mengandung "NOMOR"
         do_rows = []
         for r in range(1, ws.max_row + 1):
             val_b = self.Txt(ws.cell(row=r, column=2).value)
+            # FIX: cek apakah mengandung "NOMOR" (bukan persis "NOMOR#")
             if "NOMOR" in val_b:
                 do_rows.append(r)
         
         if not do_rows:
-            raise Exception(f"Tidak ditemukan header 'Nomor #' di Kolom B.")
+            # Fallback: cari di kolom manapun dalam 5 kolom pertama
+            self.log("   ⚠️ 'Nomor #' tidak ditemukan di kolom B, mencari di kolom lain...")
+            for r in range(1, ws.max_row + 1):
+                for c in range(1, 6):
+                    val = self.Txt(ws.cell(row=r, column=c).value)
+                    if "NOMOR" in val:
+                        do_rows.append(r)
+                        break
+                if r in do_rows or (do_rows and do_rows[-1] == r):
+                    continue
+        
+        if not do_rows:
+            raise Exception(f"Tidak ditemukan header 'Nomor #' di sheet. Sheet: {self.target_sheet}")
         
         self.log(f"   -> Ditemukan {len(do_rows)} blok DO.")
         
         for idx, r in enumerate(do_rows):
-            # Tentukan batas akhir DO ini (baris sebelum DO berikutnya)
+            # Tentukan batas akhir DO ini
             end_r = do_rows[idx + 1] if idx + 1 < len(do_rows) else ws.max_row + 1
             
-            # Baca Nomor DO (Kolom E)
+            # Baca Nomor DO - cari di kolom E (kolom 5) atau kolom setelah "Nomor #"
+            nomor_do = ""
+            # Coba kolom E dulu (kolom 5)
             nomor_do = self.TxtRaw(ws.cell(row=r, column=5).value)
-            if not nomor_do: continue
+            # Jika kosong, cari di kolom lain
+            if not nomor_do:
+                for c in range(3, 10):
+                    val = ws.cell(row=r, column=c).value
+                    if val:
+                        val_str = self.TxtRaw(val)
+                        if val_str and not val_str.startswith(":") and "." in val_str:
+                            nomor_do = val_str
+                            break
             
-            # Baca Outlet/Pelanggan (Kolom L)
+            if not nomor_do:
+                self.log(f"   ⚠️ Skip baris {r}: Nomor DO tidak ditemukan")
+                continue
+            
+            # Baca Outlet/Pelanggan - cari di kolom L (kolom 12) atau setelah "Pelanggan"
+            outlet = ""
             outlet = self.TxtRaw(ws.cell(row=r, column=12).value)
+            if not outlet:
+                for c in range(10, 20):
+                    val = ws.cell(row=r, column=c).value
+                    if val:
+                        val_str = self.TxtRaw(val)
+                        if val_str and not val_str.startswith(":"):
+                            outlet = val_str
+                            break
             
-            # Baca Tanggal (Cek baris berikutnya, Kolom B="TANGGAL", ambil Kolom E)
+            # Baca Tanggal - cari di baris berikutnya, kolom B="Tanggal", ambil kolom E
             tanggal = ""
-            if r + 1 <= ws.max_row and "TANGGAL" in self.Txt(ws.cell(row=r+1, column=2).value):
-                tanggal = ws.cell(row=r+1, column=5).value
+            for tr in range(r + 1, min(r + 5, end_r)):
+                val_b = self.Txt(ws.cell(row=tr, column=2).value)
+                if "TANGGAL" in val_b:
+                    tanggal = ws.cell(row=tr, column=5).value
+                    break
             
             # Inisialisasi DO Group
             self.DOGroups[nomor_do] = {"Outlet": outlet, "Tanggal": tanggal, "ShipVia": "", "Items": []}
             
-            # Cari baris header item "KODE #" di Kolom C
+            # Cari baris header item "Kode #" di kolom C
             item_start_row = r + 1
-            for ir in range(r + 1, min(r + 10, end_r)):
-                if "KODE" in self.Txt(ws.cell(row=ir, column=3).value):
+            for ir in range(r + 1, min(r + 15, end_r)):
+                val_c = self.Txt(ws.cell(row=ir, column=3).value)
+                if "KODE" in val_c:
                     item_start_row = ir + 1
                     break
             
             # Baca Item
-            for ir in range(item_start_row, end_r):
-                nama = self.TxtRaw(ws.cell(row=ir, column=6).value) # Kolom F
-                if not nama or "DUS" in self.Txt(nama): continue
+            item_count = 0
+            for ir in range(item_start_row, end_row if (end_row := min(end_r, ws.max_row + 1)) else ws.max_row + 1):
+                # Skip baris total (kolom L berisi angka besar tanpa nama barang)
+                nama = self.TxtRaw(ws.cell(row=ir, column=6).value)  # Kolom F
+                if not nama:
+                    # Cek apakah ini baris total (kolom L ada angka, kolom F kosong)
+                    qty_check = ws.cell(row=ir, column=12).value
+                    if qty_check is not None:
+                        try:
+                            float(str(qty_check).replace(",", ""))
+                            continue  # Ini baris total, skip
+                        except:
+                            pass
+                    continue
                 
-                qty_val = ws.cell(row=ir, column=12).value # Kolom L
+                if "DUS" in self.Txt(nama): continue
+                if nama.upper() in ["NAMA BARANG", "ITEM NAME"]: continue
+                
+                qty_val = ws.cell(row=ir, column=12).value  # Kolom L
+                if qty_val is None: continue
                 try:
                     qty = float(str(qty_val).replace(",", ""))
                 except:
                     continue
                 if qty <= 0: continue
                 
-                unit = self.TxtRaw(ws.cell(row=ir, column=14).value) # Kolom N
+                unit = self.TxtRaw(ws.cell(row=ir, column=14).value)  # Kolom N
                 unit_normalized = self.NormalizeUnit(unit)
                 
                 self.DOGroups[nomor_do]["Items"].append({
                     "Nama": nama, "Qty": qty, "Unit": unit_normalized
                 })
+                item_count += 1
+            
+            self.log(f"   -> DO {nomor_do}: {item_count} item, Outlet: {outlet}")
         
         self.log(f"   ✅ DO terbaca: {len(self.DOGroups)}")
 
@@ -357,7 +415,7 @@ class PackingListEngine:
         self.log(f"   ✅ Final Result: {len(self.FinalResult)} DO")
 
     def export(self):
-        self.log("    Exporting Excel...")
+        self.log("   📝 Exporting Excel...")
         if self.master_wb is not None:
             out_wb = self.master_wb
         else:
