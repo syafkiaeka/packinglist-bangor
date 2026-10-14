@@ -1,4 +1,4 @@
-# app.py - PT BANGOR PACKING LIST GENERATOR (FINAL PRO DASHBOARD)
+# app.py - BANGOR PACKING LIST GENERATOR 
 import streamlit as st
 import os
 import tempfile
@@ -6,7 +6,7 @@ from collections import OrderedDict
 from engine import PackingListEngine
 
 st.set_page_config(
-    page_title="PT Bangor - Packing List Generator", 
+    page_title="Bangor - Packing List Generator", 
     page_icon="", 
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -48,7 +48,7 @@ st.markdown("""
 
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 PT BANGOR</h1>
+    <h1>📦 Packinglist Generator By Logistik </h1>
     <p>Sistem Generator Packing List Otomatis • Multi-File Processing • Anti-Duplikat</p>
 </div>
 """, unsafe_allow_html=True)
@@ -196,7 +196,7 @@ if uploaded and generate_clicked:
 
 st.markdown("""
 <div class="app-footer">
-    &copy; 2026 PT Bangor - Internal Logistics System v3.5<br>
+    &copy; 2026 Bangor - Internal Logistics System v3.5<br>
     Developed for Warehouse Operations Team
 </div>
 """, unsafe_allow_html=True)
