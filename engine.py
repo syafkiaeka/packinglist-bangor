@@ -1,4 +1,4 @@
-# engine.py - UNIFIED PACKING LIST ENGINE (FIXED DATE PARSING)
+# engine.py - UNIFIED PACKING LIST ENGINE
 import os
 import math
 import copy
@@ -171,6 +171,57 @@ class PackingListEngine:
         self.stats["it_count"] = len(self.DOGroups)
         self.log(f"   ✅ IT terbaca: {len(self.DOGroups)} DO")
 
+    def _cari_tanggal_acc(self, ws, r, end_r):
+        """Cari tanggal dengan sangat agresif di sekitar baris r"""
+        tanggal = None
+        
+        # Strategi 1: Cari label "TANGGAL" di kolom B, C, D dalam range r sampai r+5
+        for tr in range(r, min(r + 6, end_r)):
+            for c_lbl in [2, 3, 4]:  # Kolom B, C, D
+                val_lbl = self.Txt(ws.cell(row=tr, column=c_lbl).value)
+                if "TANGGAL" in val_lbl:
+                    # Ketemu label! Sekarang cari nilai tanggal di kolom E, F, G, H
+                    for c_val in [5, 6, 7, 8]:  # Kolom E, F, G, H
+                        val = ws.cell(row=tr, column=c_val).value
+                        if val is not None:
+                            val_str = str(val).strip()
+                            # Pastikan ini bukan label ":" atau teks aneh
+                            if val_str and val_str != ":":
+                                tanggal = val
+                                break
+                    if tanggal is not None:
+                        break
+            if tanggal is not None:
+                break
+        
+        # Strategi 2: Jika belum ketemu, coba baris r+1 langsung kolom E, F, G
+        if tanggal is None:
+            for c_val in [5, 6, 7, 8]:
+                val = ws.cell(row=r+1, column=c_val).value
+                if val is not None:
+                    val_str = str(val).strip()
+                    if val_str and val_str != ":" and len(val_str) > 3:
+                        tanggal = val
+                        break
+        
+        # Strategi 3: Coba semua cell di range r sampai r+5, kolom 1-10
+        if tanggal is None:
+            for tr in range(r, min(r + 6, end_r)):
+                for c in range(1, 11):
+                    val = ws.cell(row=tr, column=c).value
+                    if val is None: continue
+                    val_str = str(val).strip()
+                    # Cek apakah ini terlihat seperti tanggal
+                    if val_str and len(val_str) > 3:
+                        # Cek pattern tanggal umum
+                        if any(kw in val_str.upper() for kw in ["OCT", "NOV", "DEC", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "202", "201"]):
+                            tanggal = val
+                            break
+                if tanggal is not None:
+                    break
+        
+        return tanggal
+
     def parse_pengiriman(self):
         """Parser untuk Rincian Pengiriman Pesanan (format ACCURATE)"""
         self.log(f"    Parsing sheet: '{self.target_sheet}' (ACCURATE)...")
@@ -192,7 +243,7 @@ class PackingListEngine:
         for idx, r in enumerate(do_rows):
             end_r = do_rows[idx + 1] if idx + 1 < len(do_rows) else ws.max_row + 1
             
-            # Baca Nomor DO (Kolom E/F/G)
+            # Baca Nomor DO (Kolom E/F/G/H)
             nomor_do = ""
             for c in [5, 6, 7, 8]:
                 val = ws.cell(row=r, column=c).value
@@ -215,31 +266,10 @@ class PackingListEngine:
                         break
             
             # ==========================================
-            # FIX: LOGIKA PEMBACAAN TANGGAL LEBIH ROBUST
+            # FIX: Cari tanggal dengan fungsi khusus
             # ==========================================
-            tanggal = ""
-            # Cari label "Tanggal" di baris r sampai r+4
-            for tr in range(r, min(r + 5, end_r)):
-                row_label = ""
-                # Cek kolom B, C, D untuk label
-                for c_lbl in range(2, 5):
-                    row_label += self.Txt(ws.cell(row=tr, column=c_lbl).value)
-                
-                if "TANGGAL" in row_label:
-                    # Ketemu label, ambil value di kolom E, F, G
-                    for c_val in range(5, 9):
-                        val = ws.cell(row=tr, column=c_val).value
-                        if val is not None:
-                            tanggal = val
-                            break
-                    break
+            tanggal = self._cari_tanggal_acc(ws, r, end_r)
             
-            # Fallback: Jika label tidak ketemu, coba ambil dari baris r+1 kolom E
-            if not tanggal:
-                val = ws.cell(row=r+1, column=5).value
-                if val is not None:
-                    tanggal = val
-
             self.DOGroups[nomor_do] = {"Outlet": outlet, "Tanggal": tanggal, "ShipVia": "", "Items": []}
             
             # Cari header item
@@ -292,7 +322,8 @@ class PackingListEngine:
                 })
                 item_count += 1
             
-            self.log(f"   📦 DO {nomor_do}: {item_count} item, Outlet: {outlet}, Tgl: {tanggal}")
+            tgl_str = str(tanggal) if tanggal else "KOSONG"
+            self.log(f"   📦 DO {nomor_do}: {item_count} item, Outlet: {outlet}, Tgl: {tgl_str}")
         
         self.stats["do_count"] = len(self.DOGroups)
         self.log(f"   ✅ Total DO (ACCURATE) terbaca: {len(self.DOGroups)} DO")
