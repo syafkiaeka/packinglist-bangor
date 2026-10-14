@@ -1,4 +1,4 @@
-# app.py - BANGOR PACKING LIST GENERATOR 
+# app.py - PT BANGOR PACKING LIST GENERATOR
 import streamlit as st
 import os
 import tempfile
@@ -7,7 +7,7 @@ from engine import PackingListEngine
 
 st.set_page_config(
     page_title="Bangor - Packing List Generator", 
-    page_icon="", 
+    page_icon="📦", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -48,7 +48,7 @@ st.markdown("""
 
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 Packinglist Generator By Logistik </h1>
+    <h1>📦 Generator Packinglist By-Logistik</h1>
     <p>Sistem Generator Packing List Otomatis • Multi-File Processing • Anti-Duplikat</p>
 </div>
 """, unsafe_allow_html=True)
@@ -119,7 +119,7 @@ if uploaded and generate_clicked:
     with progress_container:
         st.divider()
         st.subheader("⚙️ Sedang Memproses...")
-        progress_bar = st.progress(0)
+        progress_bar = st.progress(0.0)  # FIX: harus 0.0 bukan 0
         status_text = st.empty()
         log_box = st.code("", language="text", height=150)
         
@@ -132,7 +132,8 @@ if uploaded and generate_clicked:
             total_files = len(uploaded)
             
             for idx, up_file in enumerate(uploaded):
-                current_progress = ((idx + 1) / total_files) * 100
+                # FIX: progress harus antara 0.0 - 1.0, bukan 0-100
+                current_progress = (idx + 1) / total_files
                 progress_bar.progress(current_progress)
                 status_text.text(f"Memproses file {idx+1}/{total_files}: **{up_file.name}**")
                 
@@ -164,11 +165,12 @@ if uploaded and generate_clicked:
             with open(final_out_path, "rb") as f:
                 data = f.read()
 
-            progress_bar.progress(100)
+            # FIX: progress 1.0 bukan 100
+            progress_bar.progress(1.0)
             status_text.text("✅ Semua file berhasil diproses!")
             
             burger_html = """
-            <!DOCTYPE html><html><head><style>body{margin:0;padding:0;overflow:hidden;background:transparent}.falling-item{position:absolute;top:-50px;font-size:2.5rem;animation:fall linear forwards}@keyframes fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}</style></head><body><script>const emojis=['🍔','🍟','🥤','🍗'];for(let i=0;i<50;i++){let el=document.createElement('div');el.className='falling-item';el.innerText=emojis[Math.floor(Math.random()*emojis.length)];el.style.left=Math.random()*100+'vw';el.style.animationDuration=(Math.random()*3+2)+'s';el.style.animationDelay=Math.random()*2+'s';document.body.appendChild(el);}setTimeout(()=>{document.body.innerHTML='';},6000);</script></body></html>"""
+            <!DOCTYPE html><html><head><style>body{margin:0;padding:0;overflow:hidden;background:transparent}.falling-item{position:absolute;top:-50px;font-size:2.5rem;animation:fall linear forwards}@keyframes fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}</style></head><body><script>const emojis=['🍔','','🥤','🍗'];for(let i=0;i<50;i++){let el=document.createElement('div');el.className='falling-item';el.innerText=emojis[Math.floor(Math.random()*emojis.length)];el.style.left=Math.random()*100+'vw';el.style.animationDuration=(Math.random()*3+2)+'s';el.style.animationDelay=Math.random()*2+'s';document.body.appendChild(el);}setTimeout(()=>{document.body.innerHTML='';},6000);</script></body></html>"""
             st.markdown(f'<iframe srcdoc="{burger_html}" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99999;border:none;" sandbox="allow-scripts"></iframe>', unsafe_allow_html=True)
 
             with result_container:
@@ -179,7 +181,7 @@ if uploaded and generate_clicked:
                 st.download_button(
                     label="⬇️ DOWNLOAD HASIL GABUNGAN (.xlsx)",
                     data=data,
-                    file_name=f"PACKINGLIST_GABUNGAN_{len(uploaded)}FILE.xlsx",
+                    file_name=f"PACKINGLIST{len(uploaded)}FILE.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                     type="primary"
@@ -187,7 +189,7 @@ if uploaded and generate_clicked:
                 st.markdown('</div>', unsafe_allow_html=True)
                 
         except Exception as e:
-            progress_bar.progress(0)
+            progress_bar.progress(0.0)
             status_text.text("❌ Terjadi kesalahan!")
             st.error(f"**GAGAL MEMPROSES:** {e}")
         finally:
