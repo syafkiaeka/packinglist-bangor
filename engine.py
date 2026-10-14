@@ -1,4 +1,4 @@
-# engine.py - UNIFIED PACKING LIST ENGINE
+# engine.py - UNIFIED PACKING LIST ENGINE (ROBUST ACCURATE PARSER)
 import os
 import math
 import copy
@@ -79,6 +79,7 @@ class PackingListEngine:
     def detect_format(self):
         self.log("   🔍 Mendeteksi format Delivery Order...")
         sheets = self.wb.sheetnames
+        self.log(f"   📋 Sheet yang tersedia: {sheets}")
         
         rincian_sheet = next((s for s in sheets if "Rincian" in s and "Pemindahan" in s), None)
         pengiriman_sheet = next((s for s in sheets if "Rincian" in s and "Pengiriman" in s), None)
@@ -173,118 +174,136 @@ class PackingListEngine:
 
     def parse_pengiriman(self):
         """Parser untuk Rincian Pengiriman Pesanan (format ACCURATE)"""
-        self.log(f"   📄 Parsing sheet: '{self.target_sheet}' (ACCURATE)...")
+        self.log(f"    Parsing sheet: '{self.target_sheet}' (ACCURATE)...")
         ws = self.wb[self.target_sheet]
         
-        # STRUKTUR ACCURATE YANG BENAR:
+        self.log(f"   🔎 Sheet dimensions: {ws.max_row} rows x {ws.max_column} cols")
+        
+        # STRUKTUR ACCURATE:
         # Baris Header DO:
         #   Kolom B (2): "Nomor #"
         #   Kolom E (5): Nomor DO (contoh: DO.2026.10.01841)
         #   Kolom I (9): "Pelanggan"
-        #   Kolom M (13): Nama Outlet (contoh: Bangor - Tanjung Tabalong)
+        #   Kolom M (13): Nama Outlet
         # Baris Tanggal:
         #   Kolom B (2): "Tanggal"
-        #   Kolom E (5): Tanggal (contoh: 14 Oct 2026)
+        #   Kolom E (5): Tanggal
         # Baris Header Item:
         #   Kolom C (3): "Kode #"
         #   Kolom G (7): "Nama Barang"
         #   Kolom L (12): "Kuantitas"
         #   Kolom O (15): "Satuan"
-        # Baris Data Item:
-        #   Kolom C (3): Kode barang
-        #   Kolom G (7): Nama barang
-        #   Kolom L (12): Qty
-        #   Kolom O (15): Satuan
         
-        # 1. Cari semua baris yang mengandung "Nomor #" di kolom B
+        # 1. Cari semua baris yang mengandung "Nomor #" di kolom B atau C
         do_rows = []
-        for r in range(1, ws.max_row + 1):
+        for r in range(1, min(ws.max_row + 1, 500)):  # Limit search untuk performa
             val_b = self.Txt(ws.cell(row=r, column=2).value)
-            if "NOMOR" in val_b:
+            val_c = self.Txt(ws.cell(row=r, column=3).value)
+            if "NOMOR" in val_b or "NOMOR" in val_c:
                 do_rows.append(r)
+                self.log(f"   🔍 Ditemukan 'Nomor #' di baris {r}: B='{val_b}', C='{val_c}'")
         
         if not do_rows:
-            # Fallback: cari di seluruh baris
-            self.log("   ️ 'Nomor #' tidak ditemukan di kolom B, mencari di seluruh sheet...")
-            for r in range(1, ws.max_row + 1):
-                for c in range(1, 10):
+            # Fallback: cari di seluruh kolom 1-10
+            self.log("   ️ 'Nomor #' tidak ditemukan di kolom B/C, mencari di kolom lain...")
+            for r in range(1, min(ws.max_row + 1, 500)):
+                for c in range(1, 11):
                     val = self.Txt(ws.cell(row=r, column=c).value)
                     if "NOMOR" in val:
                         do_rows.append(r)
+                        self.log(f"   🔍 Ditemukan 'Nomor #' di baris {r}, kolom {c}: '{val}'")
                         break
         
         if not do_rows:
             raise Exception(f"Tidak ditemukan header 'Nomor #' di sheet '{self.target_sheet}'")
         
-        self.log(f"   🔎 Ditemukan {len(do_rows)} blok DO di sheet")
+        self.log(f"   ✅ Ditemukan {len(do_rows)} blok DO")
         
         for idx, r in enumerate(do_rows):
             # Tentukan batas akhir DO ini
             end_r = do_rows[idx + 1] if idx + 1 < len(do_rows) else ws.max_row + 1
             
-            # Baca Nomor DO dari Kolom E (kolom 5)
-            nomor_do = self.TxtRaw(ws.cell(row=r, column=5).value)
+            self.log(f"   📦 Memproses DO ke-{idx+1} di baris {r} (sampai baris {end_r})")
             
-            # Jika kosong, coba cari di kolom sekitar (F, G)
-            if not nomor_do:
-                for c in [6, 7]:
-                    val = ws.cell(row=r, column=c).value
-                    if val:
-                        val_str = self.TxtRaw(val)
-                        if val_str and ("DO." in val_str.upper() or "." in val_str):
-                            nomor_do = val_str
-                            break
+            # Baca Nomor DO dari Kolom E (kolom 5)
+            nomor_do = ""
+            for c in [5, 6, 7, 8]:  # Coba kolom E, F, G, H
+                val = ws.cell(row=r, column=c).value
+                if val:
+                    val_str = self.TxtRaw(val)
+                    if val_str and ("DO." in val_str.upper() or "IT." in val_str.upper()):
+                        nomor_do = val_str
+                        break
             
             if not nomor_do:
                 self.log(f"   ⚠️ Baris {r}: Nomor DO tidak ditemukan, skip")
                 continue
             
-            # Baca Outlet/Pelanggan dari Kolom M (kolom 13)
-            outlet = self.TxtRaw(ws.cell(row=r, column=13).value)
-            if not outlet:
-                for c in [14, 15, 12, 11]:
-                    val = ws.cell(row=r, column=c).value
-                    if val:
-                        val_str = self.TxtRaw(val)
-                        if val_str and not val_str.startswith(":") and len(val_str) > 3:
-                            outlet = val_str
-                            break
+            self.log(f"   📄 Nomor DO: {nomor_do}")
             
-            # Baca Tanggal dari baris berikutnya, kolom E (kolom 5)
+            # Baca Outlet/Pelanggan dari Kolom M (kolom 13)
+            outlet = ""
+            for c in [13, 14, 15, 12, 11, 10]:  # Coba kolom M, N, O, L, K, J
+                val = ws.cell(row=r, column=c).value
+                if val:
+                    val_str = self.TxtRaw(val)
+                    if val_str and not val_str.startswith(":") and len(val_str) > 3:
+                        outlet = val_str
+                        break
+            
+            self.log(f"   🏪 Outlet: {outlet}")
+            
+            # Baca Tanggal dari baris berikutnya
             tanggal = ""
             for tr in range(r + 1, min(r + 5, end_r)):
                 val_b = self.Txt(ws.cell(row=tr, column=2).value)
                 if "TANGGAL" in val_b:
-                    tanggal = ws.cell(row=tr, column=5).value
+                    # Cari tanggal di kolom E, F, G
+                    for c in [5, 6, 7]:
+                        val = ws.cell(row=tr, column=c).value
+                        if val:
+                            tanggal = val
+                            break
                     break
-                # Fallback: jika baris berikutnya punya data di kolom E
-                val_e = ws.cell(row=tr, column=5).value
-                if val_e and isinstance(val_e, (str, int, float)):
-                    tanggal = val_e
-                    break
+            
+            self.log(f"   📅 Tanggal: {tanggal}")
             
             # Inisialisasi DO Group
             self.DOGroups[nomor_do] = {"Outlet": outlet, "Tanggal": tanggal, "ShipVia": "", "Items": []}
             
             # Cari baris header item "Kode #" di kolom C
             item_start_row = r + 1
-            for ir in range(r + 1, min(r + 15, end_r)):
+            for ir in range(r + 1, min(r + 20, end_r)):
                 val_c = self.Txt(ws.cell(row=ir, column=3).value)
-                if "KODE" in val_c:
+                val_d = self.Txt(ws.cell(row=ir, column=4).value)
+                if "KODE" in val_c or "KODE" in val_d:
                     item_start_row = ir + 1
+                    self.log(f"   🔍 Header item ditemukan di baris {ir}, mulai baca dari baris {item_start_row}")
                     break
             
             # Baca Item dari kolom G (nama), L (qty), O (satuan)
             item_count = 0
             for ir in range(item_start_row, end_r):
                 # Baca Nama Barang dari Kolom G (kolom 7)
-                nama = self.TxtRaw(ws.cell(row=ir, column=7).value)
+                nama = ""
+                for c in [7, 8, 9]:  # Coba kolom G, H, I
+                    val = ws.cell(row=ir, column=c).value
+                    if val:
+                        nama = self.TxtRaw(val)
+                        break
+                
                 if not nama: continue
                 if "DUS" in self.Txt(nama): continue
-                if nama.upper() in ["NAMA BARANG", "ITEM NAME", "TOTAL"]: continue
+                if nama.upper() in ["NAMA BARANG", "ITEM NAME", "TOTAL", "ACCURATE"]: continue
                 
                 # Baca Kuantitas dari Kolom L (kolom 12)
-                qty_val = ws.cell(row=ir, column=12).value
+                qty_val = None
+                for c in [12, 13]:  # Coba kolom L, M
+                    val = ws.cell(row=ir, column=c).value
+                    if val is not None:
+                        qty_val = val
+                        break
+                
                 if qty_val is None: continue
                 try:
                     qty = float(str(qty_val).replace(",", ""))
@@ -293,7 +312,13 @@ class PackingListEngine:
                 if qty <= 0: continue
                 
                 # Baca Satuan dari Kolom O (kolom 15)
-                unit = self.TxtRaw(ws.cell(row=ir, column=15).value)
+                unit = ""
+                for c in [15, 16, 14]:  # Coba kolom O, P, N
+                    val = ws.cell(row=ir, column=c).value
+                    if val:
+                        unit = self.TxtRaw(val)
+                        break
+                
                 unit_normalized = self.NormalizeUnit(unit)
                 
                 self.DOGroups[nomor_do]["Items"].append({
@@ -301,10 +326,10 @@ class PackingListEngine:
                 })
                 item_count += 1
             
-            self.log(f"   📦 DO {nomor_do}: {item_count} item, Outlet: {outlet}")
+            self.log(f"   ✅ DO {nomor_do}: {item_count} item, Outlet: {outlet}")
         
         self.stats["do_count"] = len(self.DOGroups)
-        self.log(f"   ✅ DO (ACCURATE) terbaca: {len(self.DOGroups)} DO")
+        self.log(f"   ✅ Total DO (ACCURATE) terbaca: {len(self.DOGroups)} DO")
 
     def parse_delivery_order(self):
         self.log(f"   📄 Parsing sheet: '{self.target_sheet}'...")
@@ -365,7 +390,7 @@ class PackingListEngine:
         else: return (f"{kat} Receh" if is_receh else kat, 99)
 
     def transform(self):
-        self.log("   ️ Transforming data + Breakdown Koli...")
+        self.log("   ⚙️ Transforming data + Breakdown Koli...")
         for do_no, data in self.DOGroups.items():
             hasil = []
             for item in data["Items"]:
