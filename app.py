@@ -6,7 +6,7 @@ from collections import OrderedDict
 from engine import PackingListEngine
 
 st.set_page_config(
-    page_title="PT Bangor - Packing List Generator", 
+    page_title="Bangor - Packing List Generator", 
     page_icon="", 
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -56,7 +56,7 @@ st.markdown("""
 
 st.markdown("""
 <div class="bangor-header">
-    <h1>📦 Generator Packinglist By-Logistik</h1>
+    <h1>📦Generator Packinglist By-Logistik</h1>
     <p>Sistem Generator Packing List Otomatis • Multi-File Processing • Anti-Duplikat</p>
 </div>
 """, unsafe_allow_html=True)
@@ -112,7 +112,7 @@ with col_status:
         st.metric(label="Total File Diupload", value="-")
         st.divider()
         st.caption("Silakan upload file Excel terlebih dahulu untuk mengaktifkan tombol Generate.")
-        st.button("🚀 MULAI GENERATE PACKING LIST", disabled=True, use_container_width=True)
+        st.button("🚀 GENERATE PACKING LIST", disabled=True, use_container_width=True)
         
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -200,7 +200,7 @@ if uploaded and generate_clicked:
         st.download_button(
             label="⬇️ Download Packinglist (.xlsx)",
             data=data,
-            file_name=f"PACKINGLIST_GABUNGAN_{len(uploaded)}FILE.xlsx",
+            file_name=f"Packinglist{len(uploaded)}FILE.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
             type="primary"
